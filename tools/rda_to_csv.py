@@ -102,8 +102,9 @@ if __name__ == "__main__":
     src, dst = sys.argv[1], sys.argv[2]
     objs = R(opener(open(src, "rb").read())).item()
     name, df, _ = objs[0]
-    names = df.attrs["names"]
-    cols = [column(c) for c in df]
+    keep = [k for k, n in enumerate(df.attrs["names"]) if n != "input"]  # D8: input only repeats the previous choice
+    names = [df.attrs["names"][k] for k in keep]
+    cols = [column(df[k]) for k in keep]
     print("object:", name, "| class:", df.attrs.get("class"), "| rows:", len(cols[0]), "| cols:", list(names))
     with open(dst, "w", newline="") as f:
         w = csv.writer(f)

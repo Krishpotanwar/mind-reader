@@ -1,3 +1,9 @@
 .superpowers/
 .gitnexus/
 __pycache__/
+.venv/
+.pytest_cache/
+*.task
+data/raw/
+build/
+.ipynb_checkpoints/
