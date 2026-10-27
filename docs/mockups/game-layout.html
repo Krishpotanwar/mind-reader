@@ -1,0 +1,151 @@
+<h2>Mind-Reader: which game screen feels most fun?</h2>
+<p class="subtitle">Same game under all three. Your webcam reads your hand, the bot locks its move before you throw, and one of your lab algorithms is the bot's "brain" that guesses your next move. Click the one you like, then tell me in the terminal what to change.</p>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="hand" viewBox="0 0 200 200">
+      <g stroke="#e8f5e9" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" fill="none">
+        <polyline points="100,185 78,170 62,150 60,130 72,118"/>
+        <polyline points="100,185 85,120 75,85 68,62 62,40"/>
+        <polyline points="102,118 110,82 116,58 122,35"/>
+        <polyline points="118,124 125,105 118,112 112,122"/>
+        <polyline points="132,132 138,118 132,124 126,132"/>
+        <polyline points="85,120 102,118 118,124 132,132 100,185"/>
+      </g>
+      <g fill="#ff5252">
+        <circle cx="100" cy="185" r="4.5"/><circle cx="78" cy="170" r="4"/><circle cx="62" cy="150" r="4"/><circle cx="60" cy="130" r="4"/><circle cx="72" cy="118" r="4"/>
+        <circle cx="85" cy="120" r="4"/><circle cx="75" cy="85" r="4"/><circle cx="68" cy="62" r="4"/><circle cx="62" cy="40" r="4"/>
+        <circle cx="102" cy="118" r="4"/><circle cx="110" cy="82" r="4"/><circle cx="116" cy="58" r="4"/><circle cx="122" cy="35" r="4"/>
+        <circle cx="118" cy="124" r="4"/><circle cx="125" cy="105" r="4"/><circle cx="118" cy="112" r="4"/><circle cx="112" cy="122" r="4"/>
+        <circle cx="132" cy="132" r="4"/><circle cx="138" cy="118" r="4"/><circle cx="132" cy="124" r="4"/><circle cx="126" cy="132" r="4"/>
+      </g>
+    </symbol>
+  </defs>
+</svg>
+
+<div class="cards" style="grid-template-columns:1fr">
+
+  <!-- A: ARENA -->
+  <div class="card" data-choice="arena" onclick="toggleSelect(this)">
+    <div class="card-image" style="aspect-ratio:auto;padding:16px;background:#0f1117;display:block">
+      <div style="display:grid;grid-template-columns:1.4fr 1fr;gap:14px;font-family:system-ui;color:#fff">
+        <div style="position:relative;background:radial-gradient(circle at 50% 40%,#3a3f4b,#16181d);border-radius:12px;overflow:hidden;aspect-ratio:4/3">
+          <div style="position:absolute;top:10px;left:12px;font:600 11px/1 system-ui;letter-spacing:.08em"><span style="color:#ff3b30">&#9679;</span> LIVE CAM</div>
+          <svg viewBox="0 0 200 200" style="position:absolute;left:20%;top:8%;width:60%;height:84%"><use href="#hand"/></svg>
+          <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font:800 96px/1 system-ui;color:rgba(255,255,255,.85);text-shadow:0 4px 30px rgba(0,0,0,.6)">2</div>
+          <div style="position:absolute;bottom:10px;left:12px;background:rgba(0,0,0,.65);padding:6px 12px;border-radius:999px;font:600 13px system-ui">I see: &#9996;&#65039; SCISSORS &middot; 97%</div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:10px">
+          <div style="display:flex;align-items:center;gap:10px">
+            <div style="font-size:40px">&#129302;</div>
+            <div><div style="font:800 18px system-ui;letter-spacing:.04em">CHANAKYA</div><div style="font-size:12px;color:#9aa3b2">Brain: <b style="color:#7cc4ff">SVM &#9662;</b></div></div>
+          </div>
+          <div style="background:#1c2230;border-radius:12px;padding:10px 12px;font-size:13px">&#128274; <b>My move is locked.</b><br>I think you'll throw&hellip;</div>
+          <div style="font-size:13px;display:grid;grid-template-columns:28px 1fr 38px;gap:6px;align-items:center">
+            <span>&#9994;</span><div style="height:10px;background:#2a3142;border-radius:5px"><div style="width:62%;height:100%;background:#ff9f0a;border-radius:5px"></div></div><span>62%</span>
+            <span>&#9995;</span><div style="height:10px;background:#2a3142;border-radius:5px"><div style="width:25%;height:100%;background:#5e6b85;border-radius:5px"></div></div><span>25%</span>
+            <span>&#9996;&#65039;</span><div style="height:10px;background:#2a3142;border-radius:5px"><div style="width:13%;height:100%;background:#5e6b85;border-radius:5px"></div></div><span>13%</span>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;text-align:center;margin-top:auto">
+            <div style="background:#1c2230;border-radius:10px;padding:8px"><div style="font:800 22px system-ui">3</div><div style="font-size:11px;color:#9aa3b2">YOU</div></div>
+            <div style="background:#1c2230;border-radius:10px;padding:8px"><div style="font:800 22px system-ui;color:#ff9f0a">5</div><div style="font-size:11px;color:#9aa3b2">BOT</div></div>
+            <div style="background:#1c2230;border-radius:10px;padding:8px"><div style="font:800 22px system-ui">2</div><div style="font-size:11px;color:#9aa3b2">TIES</div></div>
+          </div>
+          <div style="font-size:11px;color:#9aa3b2;text-align:center">Round 10 of 20</div>
+        </div>
+      </div>
+      <div style="margin-top:12px;background:#151a24;border-radius:12px;padding:10px 14px;font-family:system-ui">
+        <div style="font-size:11px;color:#9aa3b2;margin-bottom:4px">BOT WIN RATE, LIVE</div>
+        <svg viewBox="0 0 600 70" style="width:100%;height:70px">
+          <line x1="0" y1="46" x2="600" y2="46" stroke="#5e6b85" stroke-dasharray="6 6"/>
+          <text x="598" y="42" fill="#9aa3b2" font-size="11" text-anchor="end">pure luck = 33%</text>
+          <polyline points="0,56 60,50 120,58 180,44 240,40 300,36 360,30 420,26 480,24 540,20 600,18" fill="none" stroke="#ff9f0a" stroke-width="3"/>
+          <text x="600" y="12" fill="#ff9f0a" font-size="12" font-weight="700" text-anchor="end">57%</text>
+        </svg>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>A. Arena: balanced</h3>
+      <p>Big camera, with the bot's "thinking" beside it: its locked move, how sure it is, and the score. The win-rate line climbing above the luck line is the proof that ML works, and it's on screen the whole time.</p>
+    </div>
+  </div>
+
+  <!-- B: FACE-OFF -->
+  <div class="card" data-choice="faceoff" onclick="toggleSelect(this)">
+    <div class="card-image" style="aspect-ratio:auto;padding:16px;background:linear-gradient(135deg,#1a0f2e,#0f1a2e);display:block">
+      <div style="font-family:system-ui;color:#fff">
+        <div style="display:grid;grid-template-columns:1fr auto 1fr;gap:12px;align-items:center;margin-bottom:12px">
+          <div><div style="font:800 13px system-ui;letter-spacing:.08em;margin-bottom:4px">YOU &middot; 3</div><div style="height:14px;background:#2a2342;border-radius:7px"><div style="width:30%;height:100%;background:linear-gradient(90deg,#34c759,#7ee787);border-radius:7px"></div></div></div>
+          <div style="font:900 20px system-ui;letter-spacing:.1em;background:#ff2d55;padding:4px 14px;border-radius:8px;transform:skew(-8deg)">ROUND 7</div>
+          <div style="text-align:right"><div style="font:800 13px system-ui;letter-spacing:.08em;margin-bottom:4px">5 &middot; CHANAKYA</div><div style="height:14px;background:#2a2342;border-radius:7px;display:flex;justify-content:flex-end"><div style="width:50%;height:100%;background:linear-gradient(90deg,#ff9f0a,#ff2d55);border-radius:7px"></div></div></div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr auto 1fr;gap:12px;align-items:center">
+          <div style="position:relative;background:radial-gradient(circle at 50% 40%,#3a3f4b,#16181d);border-radius:14px;overflow:hidden;aspect-ratio:4/3;border:3px solid #34c759">
+            <svg viewBox="0 0 200 200" style="position:absolute;left:18%;top:8%;width:64%;height:84%"><use href="#hand"/></svg>
+            <div style="position:absolute;bottom:8px;left:50%;transform:translateX(-50%);font:800 15px system-ui;background:rgba(0,0,0,.6);padding:4px 12px;border-radius:999px">&#9996;&#65039; SCISSORS</div>
+          </div>
+          <div style="font:900 34px system-ui;font-style:italic;color:#ffd60a;text-shadow:0 0 18px rgba(255,214,10,.6)">VS</div>
+          <div style="position:relative;background:radial-gradient(circle at 50% 45%,#3b1d4f,#160d24);border-radius:14px;aspect-ratio:4/3;border:3px solid #ff2d55;display:flex;flex-direction:column;align-items:center;justify-content:center">
+            <div style="font-size:72px;line-height:1">&#129302;</div>
+            <div style="font:800 15px system-ui;margin-top:6px">&#9994; ROCK</div>
+            <div style="position:absolute;top:10px;left:10px;right:10px;background:#fff;color:#1d1d1f;border-radius:12px;padding:6px 10px;font:600 12px system-ui">"Rock beats scissors. You're too easy to read! &#128527;"</div>
+          </div>
+        </div>
+        <div style="margin-top:12px;text-align:center;font:900 18px system-ui;letter-spacing:.06em;background:linear-gradient(90deg,transparent,#ff2d55,transparent);padding:8px">CHANAKYA READ YOUR MIND! It predicted &#9996;&#65039; and threw &#9994;</div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>B. Face-off: most game-like</h3>
+      <p>Built like a fighting game: health bars, ROUND banners, and a bot that talks trash out loud (it'll be heard over the classroom sound system). The charts and stats are held back for the end-of-match report.</p>
+    </div>
+  </div>
+
+  <!-- C: BRAIN BATTLE -->
+  <div class="card" data-choice="brainbattle" onclick="toggleSelect(this)">
+    <div class="card-image" style="aspect-ratio:auto;padding:16px;background:#0d1512;display:block">
+      <div style="display:grid;grid-template-columns:0.8fr 1.4fr;gap:14px;font-family:system-ui;color:#fff">
+        <div style="display:flex;flex-direction:column;gap:10px">
+          <div style="position:relative;background:radial-gradient(circle at 50% 40%,#3a3f4b,#16181d);border-radius:12px;overflow:hidden;aspect-ratio:4/3">
+            <div style="position:absolute;top:8px;left:10px;font:600 10px/1 system-ui;letter-spacing:.08em"><span style="color:#ff3b30">&#9679;</span> LIVE CAM</div>
+            <svg viewBox="0 0 200 200" style="position:absolute;left:18%;top:8%;width:64%;height:84%"><use href="#hand"/></svg>
+            <div style="position:absolute;bottom:8px;left:10px;background:rgba(0,0,0,.65);padding:4px 10px;border-radius:999px;font:600 12px system-ui">&#9996;&#65039; SCISSORS &middot; 97%</div>
+          </div>
+          <div style="background:#15211c;border-radius:10px;padding:10px;font-size:12px;color:#b9d8c8">Round 10 &middot; You 3 &middot; Bot 5 &middot; Ties 2</div>
+        </div>
+        <div style="background:#121d18;border-radius:12px;padding:12px 14px">
+          <div style="font-size:11px;color:#8fb3a1;margin-bottom:8px;letter-spacing:.06em">SIX BRAINS GUESS YOUR NEXT MOVE. THE BEST ONE PLAYS FOR THE BOT</div>
+          <table style="width:100%;border-collapse:collapse;font-size:13px">
+            <tr style="color:#8fb3a1;font-size:11px;text-align:left"><th style="padding:4px 0">Brain (lab)</th><th>Its guess</th><th style="text-align:right">Right so far</th></tr>
+            <tr style="border-top:1px solid #1f2e27"><td style="padding:6px 0">Naive Bayes <span style="color:#6f8f80">(Lab 7)</span></td><td>&#9994; 48%</td><td style="text-align:right">44%</td></tr>
+            <tr style="border-top:1px solid #1f2e27"><td style="padding:6px 0">Decision Tree <span style="color:#6f8f80">(Lab 4)</span></td><td>&#9996;&#65039; 51%</td><td style="text-align:right">39%</td></tr>
+            <tr style="border-top:1px solid #1f2e27;background:rgba(255,214,10,.08)"><td style="padding:6px 0">&#128081; <b>SVM</b> <span style="color:#6f8f80">(Lab 8)</span></td><td><b>&#9994; 62%</b></td><td style="text-align:right;color:#ffd60a"><b>57%</b></td></tr>
+            <tr style="border-top:1px solid #1f2e27"><td style="padding:6px 0">Logistic Reg. <span style="color:#6f8f80">(Lab 6)</span></td><td>&#9994; 55%</td><td style="text-align:right">52%</td></tr>
+            <tr style="border-top:1px solid #1f2e27"><td style="padding:6px 0">Perceptron <span style="color:#6f8f80">(Lab 6)</span></td><td>&#9995; 40%</td><td style="text-align:right">41%</td></tr>
+            <tr style="border-top:1px solid #1f2e27;color:#6f8f80"><td style="padding:6px 0">Random (pure luck)</td><td>?</td><td style="text-align:right">33%</td></tr>
+          </table>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>C. Brain Battle: most "ML lab"</h3>
+      <p>Every algorithm predicts every round, live, and the crown moves to whichever one is reading you best right now. This is your professor's "results from different algorithms", played out in real time.</p>
+    </div>
+  </div>
+</div>
+
+<div class="section" style="margin-top:1.5rem">
+  <div class="label">Shown at the end of the match (same for all three)</div>
+  <div class="mockup">
+    <div class="mockup-header">Match report: after 20 rounds</div>
+    <div class="mockup-body" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;font-size:14px">
+      <div><b>Bot 11 &middot; You 6 &middot; Ties 3</b><br><span style="color:var(--text-secondary)">55% wins vs 33% for pure luck</span></div>
+      <div>&#128373;&#65039; <b>Your habits</b><br><span style="color:var(--text-secondary)">You repeat a move that just won 64% of the time. After a loss you switch to what would have beaten the bot's last move 58% of the time.</span></div>
+      <div>&#127942; <b>Most unpredictable human today</b><br><span style="color:var(--text-secondary)">Aarav: the bot only read him 36% of the time</span></div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <div class="label">Fun extras I'd add to whichever you pick</div>
+  <p style="font-size:14px;color:var(--text-secondary)">&#128483;&#65039; spoken countdown and trash talk &middot; &#128274; bot locks its move first, so it can't cheat &middot; &#129504; "here's what I predicted" reveal after each throw &middot; &#128373;&#65039; habit report &middot; &#127942; class leaderboard</p>
+</div>

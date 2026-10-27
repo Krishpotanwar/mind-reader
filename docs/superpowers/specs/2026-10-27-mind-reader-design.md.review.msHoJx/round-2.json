@@ -1,0 +1,521 @@
+{
+  "version": 2,
+  "round": 2,
+  "document": "/media/psf/project/ML Project/mind-reader/docs/superpowers/specs/2026-10-27-mind-reader-design.md",
+  "quality_score": 7,
+  "dimensions": {
+    "completeness": "ISSUES",
+    "consistency": "ISSUES",
+    "clarity": "ISSUES",
+    "scope": "ISSUES",
+    "feasibility": "ISSUES"
+  },
+  "findings": [
+    {
+      "id": "R2-1",
+      "dimension": "consistency",
+      "severity": "blocking",
+      "changed_text": "which the CSV also stores",
+      "problem": "Part 1 Features now says the mirror step uses MediaPipe's handedness 'which the CSV also stores', but Datasets item 1 still defines hand_landmarks.csv as 'one row per image, with 21 landmarks of (x, y, z), the label and the original split'. The data contract has no handedness column, so Part 1 cannot canonicalise hands from the CSV through the shared helper, and parity check 2 compares against a CSV pipeline that lacks the field. R1-6 named the missing handedness as a defect; the edit asserts the fix without changing the schema the one-time script is built from. MediaPipe also documents its handedness label for a selfie-mirrored input (stated for the older Hands solution; confirm for the pinned HandLandmarker), so the flip decision can invert if CGI images and webcam frames are mirrored differently.",
+      "remedy": "Add a handedness column (label and score) to the Datasets item 1 column list and to the one-time script's output; state the mirror convention for CGI images and for webcam frames (flip before detection, or swap the label); and include left-hand and right-hand frames in parity check 2 or the spike."
+    },
+    {
+      "id": "R2-2",
+      "dimension": "consistency",
+      "severity": "blocking",
+      "changed_text": "53% of people repeat. I bet you will.",
+      "problem": "The 'mind-read moment' announcement is self-contradictory and unbudgeted. 'The bot calls its shots out loud' (What Makes This Cool) and the sample line 'You just lost. 53% of people repeat. I bet you will.' are future-tense predictions, yet Round flow puts the announcement in step 4, the Reveal, after the throw. Spoken after the throw, 'I bet you will' is stale and 'You just lost' is false when the player won; spoken before the throw, it telegraphs the locked prediction to the player and audience, which invites a primed classmate to break the habit and changes what the demo measures. The stage round budget (3 s countdown, capture and reveal 1.5 s or less, taunt 2 s or less, 1 s pause) has no slot for it: the 11-word line takes roughly 3 to 4 s and could add about 5 to 15 s to the 65 s match, and the text does not say whether it replaces or adds to the six-word taunt.",
+      "remedy": "Decide when the line is spoken (during Lock or Countdown, or as a past-tense line at the Reveal such as 'Called it: you repeated after a loss'), whether telegraphing the prediction is acceptable, and whether it replaces or adds to the taunt; then put its duration into the stage round budget and the run sheet."
+    },
+    {
+      "id": "R2-3",
+      "dimension": "consistency",
+      "severity": "minor",
+      "changed_text": null,
+      "problem": "Datasets item 2 still says rock is chosen 35.7% of the time while Premise 3 and the baseline table give always-rock as 35.6%, with no row set stated for either. The 0.1-point gap is consistent with excluding the 72 first-round rows (42 of 72 first throws were rock, and about 7,669 of 21,528 rows is 35.6%), but the document never says so.",
+      "remedy": "State the row set behind each figure (all 21,600 rows versus rows with enough history) or use a single figure."
+    },
+    {
+      "id": "R2-4",
+      "dimension": "clarity",
+      "severity": "minor",
+      "changed_text": null,
+      "problem": "The Datasets column list still ends with 'input', which is never defined or given a role. If it encodes the current opponent move or round outcome, using it as a feature would leak the label.",
+      "remedy": "Define 'input' in the data notes and state that it is excluded from the features, or drop it from the CSV."
+    },
+    {
+      "id": "R2-5",
+      "dimension": "consistency",
+      "severity": "minor",
+      "changed_text": null,
+      "problem": "Notebook structure 0 still specifies an unpinned 'pip install mediapipe' and an unversioned hand_landmarker.task download. The spike now says 'with a pinned version', but the pin is not carried into the install cell, the model file has no URL or checksum, and nothing records whether a runtime restart is needed after the install (which would interrupt 'Run all').",
+      "remedy": "Name the exact version the spike validates in the install cell, pin the model-file URL or checksum, and record in the spike whether a restart is needed."
+    },
+    {
+      "id": "R2-6",
+      "dimension": "completeness",
+      "severity": "minor",
+      "changed_text": null,
+      "problem": "Nothing says how the CSVs reach a fresh Colab runtime. 'Open in Colab' opens only the notebook, Parts 1 and 2 load the CSV by default, and whether the repo is public is still an Open Question.",
+      "remedy": "Add a first-cell data fetch (clone the repo or download from raw URLs) with a clear error message if it fails, and settle the public-repo question before the notebook is built."
+    },
+    {
+      "id": "R2-7",
+      "dimension": "consistency",
+      "severity": "minor",
+      "changed_text": null,
+      "problem": "Viva prep still says VIVA_GUIDE.md is 'also published as a readable web page', but the Distribution Plan lists only repo contents and 'No CI', with no hosting step.",
+      "remedy": "Add the hosting step (for example GitHub Pages, which needs the public repo) to the Distribution Plan, or drop the web page."
+    },
+    {
+      "id": "R2-8",
+      "dimension": "clarity",
+      "severity": "minor",
+      "changed_text": null,
+      "problem": "The live screen is still specified by reference to 'mockup B, Face-off, from the brainstorm' and 'mockup C's table', which are not in the repo or the document, and the bot name CHANAKYA is never introduced.",
+      "remedy": "Save the mockups under docs/mockups and link them, or give a short text wireframe, and introduce the bot persona once."
+    },
+    {
+      "id": "R2-9",
+      "dimension": "clarity",
+      "severity": "minor",
+      "changed_text": null,
+      "problem": "The match rules behind the Face-off screen are still undefined: what drains the health bars, how ties and a drawn match are scored, who wins a match, and whether reaching zero ends it early. The fixed 8-round stage match can finish level, and 'If the bot loses on stage' does not say whether a draw counts.",
+      "remedy": "Define damage per round, tie handling, the match winner (including a drawn match) and whether any early finish exists, in one short paragraph."
+    },
+    {
+      "id": "R2-10",
+      "dimension": "clarity",
+      "severity": "minor",
+      "changed_text": null,
+      "problem": "The match report still shows repeat rates after a loss, tie and win, 'which way they cycle', a replay 'through every brain to show which one read the player best', and the 'most unpredictable human today' leaderboard, now from an 8-round stage match (about 7 transitions, 2 to 3 per result type, and one round is 12.5 points). This conflicts with the new statement that chance alone swings an 8-round result by about +/-17 points, and the leaderboard metric is still undefined.",
+      "remedy": "Define the leaderboard metric, show counts as k of n with a 'small sample' note, label the brain replay as illustrative rather than a ranking, or cut the leaderboard."
+    },
+    {
+      "id": "R2-11",
+      "dimension": "clarity",
+      "severity": "minor",
+      "changed_text": null,
+      "problem": "Most Success Criteria now have protocols and thresholds (Brain as the mean of 5-fold GroupKFold, Eyes live widened, median of 1.5 s or less, a lock test). Two remain unchecked as written: 'Run all' still says 'under about 5 minutes', and 'Krish can answer a 10-question mock viva' has no pass mark.",
+      "remedy": "Give 'Run all' an exact limit (for example 5 minutes on a fresh runtime) and the mock viva a pass mark (for example 8 of 10)."
+    },
+    {
+      "id": "R2-12",
+      "dimension": "feasibility",
+      "severity": "minor",
+      "changed_text": null,
+      "problem": "The 5-minute 'Run all' budget is still unproven. Part 2 quotes about 30 to 40 s per RBF fit on 21K rows and says only 'a subsample or a small grid', with no subsample size, grid or per-section time budget; the spike does not time a full run; and the 45.3% SVM figure was measured on full data, so a subsampled SVM will report a different number.",
+      "remedy": "Fix the subsample size and grids, give each section a time budget, time a full run on a fresh Colab runtime in the spike, and report the figure the notebook actually produces."
+    },
+    {
+      "id": "R2-13",
+      "dimension": "feasibility",
+      "severity": "minor",
+      "changed_text": null,
+      "problem": "The spike now covers the real webcam, the burst round trip with preview, and speech, run by Krish on the demo laptop and browser, which resolves the too-narrow part of the original finding. The too-late part persists: after the spike the next Colab test is step 11, after the JS widget, speech and report are built blind, and there is no stubbed invokeFunction harness. Speech is tested only through the laptop speakers, not through HDMI or Wondercast and the classroom system named in Constraints, whose audio lag could put the 0.4 s burst before the player's actual throw.",
+      "remedy": "Add Colab checkpoints with Krish after steps 6 and 7, add a stubbed invokeFunction harness so the widget can run outside Colab, and have the spike measure the offset between the audible 'shoot' and the burst start on the real audio route."
+    },
+    {
+      "id": "R2-14",
+      "dimension": "completeness",
+      "severity": "minor",
+      "changed_text": null,
+      "problem": "The reveal still shows a percentage for every brain ('I predicted ROCK (62%)'), but Perceptron has no predict_proba, a Decision Tree gives coarse leaf frequencies, an SVM needs probability=True (extra cross-validation on 21K rows), Random has none, and the round-1 rock assumption and Personal counts have no stated percentage. Part 1's 'predict one new sample with predict_proba' has the same gap.",
+      "remedy": "State what the reveal shows per brain (omit the percentage for Perceptron and Random, give the count share for Personal and 58.3% for the round-1 assumption) and budget the SVM probability cost."
+    },
+    {
+      "id": "R2-15",
+      "dimension": "completeness",
+      "severity": "minor",
+      "changed_text": null,
+      "problem": "Part 2 still lists Categorical NB, Decision Tree, Perceptron, Logistic Regression and SVM with no encoding (integer codes for Categorical NB, one-hot for the linear models and SVM) and no ColumnTransformer placement. The live brains now predict a shift, but the accuracy table (45.3%, 44.1% and so on) does not say whether it was measured on the absolute or the relative target, so live accuracy may differ from the reported figures.",
+      "remedy": "Specify the encoding per model, place ColumnTransformer in Part 2, and state which target the table and the live brains use (re-measure if they differ)."
+    },
+    {
+      "id": "R2-16",
+      "dimension": "clarity",
+      "severity": "minor",
+      "changed_text": null,
+      "problem": "'The Perceptron fails at the brain task for a reason worth explaining' is still promised and still not explained. 'Not linearly separable' would not distinguish it from Logistic Regression (43.9%), which is also a linear model.",
+      "remedy": "State the explanation Krish will give (for example non-converging updates on noisy labels, or no probabilistic output) with supporting evidence in the notebook, or drop the claim."
+    },
+    {
+      "id": "R2-17",
+      "dimension": "clarity",
+      "severity": "minor",
+      "changed_text": null,
+      "problem": "The headline 52.7% (and now the 58.3% first-throw figure) is still attributed to 'a 2014 study' and 'the study's players', but both are the project's own calculations from the public data, with no reproducible check named for them (tools/rps_check.py is cited only for the Personal table) and no viva note on the sample (72 players, one lab design).",
+      "remedy": "Say 'computed from the study's public data', cite the paper if it reports the figure, add a notebook cell or tools assert that prints 52.7% and 58.3%, and add a viva note on the sample."
+    },
+    {
+      "id": "R2-18",
+      "dimension": "completeness",
+      "severity": "minor",
+      "changed_text": null,
+      "problem": "The privacy statement still reads 'Frames are processed in memory and never saved', although each throw now sends 5 frames (plus previews) of a classmate's face to a Google-hosted VM, nothing tells the player, and the notebook is committed 'saved with outputs' to a possibly public repo.",
+      "remedy": "Add a one-line disclosure and consent prompt before the camera starts, reword the statement to what is true, and add a pre-commit step that clears live-game outputs and checks the .ipynb contains no frames or names."
+    },
+    {
+      "id": "R2-19",
+      "dimension": "completeness",
+      "severity": "minor",
+      "changed_text": null,
+      "problem": "The browser-to-Python boundary is still unvalidated. The throw call now carries 5 frames plus a round id, but nothing limits frame count, size or format, rejects undecodable images, checks that the round id is the active one, allow-lists the brain id, or says typed names are rendered as text rather than HTML.",
+      "remedy": "Specify that Python validates all inputs (exactly 5 frames, maximum size, decodable JPEG, active round id, brain id from an allow-list, name length) and that the widget renders names with textContent."
+    },
+    {
+      "id": "R2-20",
+      "dimension": "completeness",
+      "severity": "minor",
+      "changed_text": null,
+      "problem": "Widget failure states are still unspecified: camera denied or absent, getUserMedia blocked, kernel disconnected or busy, speech unavailable. 'Show me your hand' is the only error path, and in auto-advancing stage mode nothing caps consecutive rejected throws, so a covered camera stalls the match. There is no non-camera way to continue.",
+      "remedy": "List each failure with its on-screen message, cap consecutive rejections (for example 3, then accept the 1/2/3 keys as the throw), and add a keyboard throw mode so the match, report and viva demo run without a camera."
+    },
+    {
+      "id": "R2-21",
+      "dimension": "scope",
+      "severity": "minor",
+      "changed_text": null,
+      "problem": "There is still no must/should/could order or cut line while the deadline is an open question. The edit added scope (Part 1b, practice-mode logging, a 3-classmate pilot, parity tests, mind-read moments, an 11-step plan) while only the mid-match brain switch was dropped.",
+      "remedy": "Add a priority order with a minimum viable demo (Parts 1-2, a simple live match, the guide) and name the first items to cut if the date is short."
+    },
+    {
+      "id": "R2-22",
+      "dimension": "completeness",
+      "severity": "minor",
+      "changed_text": null,
+      "problem": "The Distribution Plan is unchanged: it lists only the notebook, data/, tools/, the guide and a README. Approach B 'reuses the trained models', but nothing persists models or provides a local runner, a local hand_landmarker.task or an environment file, and there is no offline HTML or PDF export or fast-restart cell for lost internet or a recycled Colab runtime. Only the professor-acceptance question was added, which covers one line of the original finding.",
+      "remedy": "State in the Distribution Plan what each fallback needs: saved models, a local runner with its requirements and model file if B is kept, an executed-notebook HTML or PDF export, and a fast-restart cell that loads the saved models."
+    },
+    {
+      "id": "R2-23",
+      "dimension": "completeness",
+      "severity": "minor",
+      "changed_text": "they overwrite the last round",
+      "problem": "The correction buttons 'overwrite the last round's score and history', but stage mode auto-advances after a 1 s pause, so the next round's counter-move may already be locked from the uncorrected history. The Personal table, which is incremented after each round, is not said to be adjusted, and the correction window (how long, last round only) is not defined.",
+      "remedy": "Define the correction window in stage mode, state that the Personal table is rebuilt from the corrected history (or decremented and incremented), and say whether a lock made from the old history is recomputed before capture."
+    },
+    {
+      "id": "R2-24",
+      "dimension": "clarity",
+      "severity": "minor",
+      "changed_text": "The throw handler receives only a round id",
+      "problem": "'The throw handler receives only a round id' (Round flow step 1 and the lock criterion) contradicts step 3, where the browser sends 5 frames in one call, so the handler also receives frames. As written the automated lock check cannot pass literally and does not say what it must show about bot-move leakage.",
+      "remedy": "Say the handler receives the round id and the frames only, never the bot's move, and test exactly that signature."
+    },
+    {
+      "id": "R2-25",
+      "dimension": "feasibility",
+      "severity": "minor",
+      "changed_text": "mean probability is at least 0.7",
+      "problem": "The acceptance rule needs the Part 1 model to give usable probabilities, but Part 1 offers Perceptron (none), SVM (needs probability=True) and Decision Tree (coarse leaf frequencies), and the document does not require the live eyes model to support it. It also does not say whether the mean is over the agreeing frames or all five, how frames with no hand count, or how '3 of 5' and 0.7 are chosen; tuning them on the same people used for the 95% and 85% pass test would inflate the result.",
+      "remedy": "Require the live eyes model to expose probabilities (for example Logistic Regression, or SVM with probability=True), define the mean and the no-hand frames, and tune the constants on spike data from different people than the pass test."
+    },
+    {
+      "id": "R2-26",
+      "dimension": "feasibility",
+      "severity": "minor",
+      "changed_text": "rendered from different hand models",
+      "problem": "The justification for the official split says its images were 'rendered from different hand models', with no source or check. I could not confirm it from the document or its cited links. If train and test share hand models, the official test set also leaks near-duplicates and the 95% criterion is inflated.",
+      "remedy": "Cite where the dataset says so, or verify it in the spike (for example nearest-neighbour distances between train and test landmarks), and soften the sentence if it cannot be shown."
+    },
+    {
+      "id": "R2-27",
+      "dimension": "completeness",
+      "severity": "minor",
+      "changed_text": "the best model scores at least 95% accuracy on",
+      "problem": "The offline Eyes criterion names 'the official test set (372 images)', but Datasets drops images where no hand is found, so the denominator can be below 372 and undetected images are not counted as errors. The old trigger (CGI detection under about 90% means record real hands) was removed, and the spike measures detection rate with no decision rule.",
+      "remedy": "State how undetected images count toward the 95% (count them as errors, or report the detection rate alongside with a cap on allowed drops), and give the detection rate a decision rule in the spike outcome."
+    },
+    {
+      "id": "R2-28",
+      "dimension": "completeness",
+      "severity": "minor",
+      "changed_text": "real-webcam test misses this, add Part 1b",
+      "problem": "The Eyes live pass test needs at least 3 people, both hands and 2 lighting conditions, but the spike's real-webcam test is only Krish (10 throws per gesture), and the Part 1b trigger is 'if the spike's real-webcam test misses this'. The 3-person test is not scheduled in Next Steps (step 11 is a general full test), and a miss there triggers nothing.",
+      "remedy": "Schedule the 3-person test (for example after step 6), say that a miss there also triggers Part 1b, and either run the spike with the same protocol or call the spike result an early warning only."
+    },
+    {
+      "id": "R2-29",
+      "dimension": "feasibility",
+      "severity": "minor",
+      "changed_text": "to reveal is 1.5 s or less on Krish",
+      "problem": "The latency criterion and Approach B trigger 2 are measured 'on Krish's network', where the earlier text said 'on classroom Wi-Fi'. Trigger 3 only checks that the venue has working internet, and trigger 2 is evaluated once, at the end of the spike on throwaway code, while the criterion applies to the finished game. Nothing measures shoot-to-reveal on the network used on the day or at step 11, yet stage mode budgets 1.5 s for it.",
+      "remedy": "Re-measure the median at step 11 and in a pre-demo-day dry run on the network that will be used at the venue (or the hotspot Krish will bring), and say what happens on a miss."
+    },
+    {
+      "id": "R2-30",
+      "dimension": "clarity",
+      "severity": "minor",
+      "changed_text": "It predicts the most counted shift, then adds 1 to the observed cell after each round.",
+      "problem": "The Personal brain is defined, but not exactly. (1) Its two inputs are redundant: the result is fixed by the opponent's relative move (same is a tie, opponent one up beats the player, opponent one down loses to the player), and Datasets says the result column agrees with the rules on 100% of rows, so only 3 of 9 contexts are reachable and the '3x3x3 table' is effectively 3x3. (2) 'The most counted shift' has no tie-break, yet round 2 starts from all cells at 1, a three-way tie, so the round-2 prediction and the measured 40.0% depend on an unstated rule. (3) 'The same idea as Naive Bayes (Lab 7)' is loose: it is a conditional-frequency lookup, not Gaussian NB. (4) The shift rule says 'last own move', which reads as the bot's own move.",
+      "remedy": "Reduce it to one context variable or state the redundancy, state the tie-break used by tools/personal_check.py, describe it in the viva as a conditional-frequency table related to Naive Bayes, and write 'the player's last move' in the shift rule."
+    },
+    {
+      "id": "R2-31",
+      "dimension": "clarity",
+      "severity": "minor",
+      "changed_text": "Rounds advance on their own after Space starts the match",
+      "problem": "Accessibility still says 'Space starts a round', but stage mode now says Space starts the match and rounds 'advance on their own', and practice mode (20 rounds) has no stated advance rule. Auto-advance has no pause key, so keyboard users cannot slow it down.",
+      "remedy": "State how rounds advance in practice mode, change the Accessibility line to match, and add a pause or hold key."
+    },
+    {
+      "id": "R2-32",
+      "dimension": "consistency",
+      "severity": "minor",
+      "changed_text": "columns (round, choice, other_choice, result)",
+      "problem": "Practice mode and the Assignment log 'the study's columns (round, choice, other_choice, result)', but Datasets names the study's columns id, game, period, choice, other.choice, result, input. The names differ (period versus round, other.choice versus other_choice), id (needed to group by player) is missing, and the r/p/s coding and the perspective of result are not stated, so pilot logs cannot be replayed 'like the 2014 data' without an undocumented mapping.",
+      "remedy": "Use the CSV header names exactly (or document the mapping), include a player id, and state the r/p/s coding and that result is from the player's view."
+    },
+    {
+      "id": "R2-33",
+      "dimension": "completeness",
+      "severity": "minor",
+      "changed_text": "with results added to the notebook",
+      "problem": "Classmates' pilot logs are to be 'added to the notebook', and Part 1b records at least 3 people x 50 samples per gesture, but nothing says what is stored (throws only, landmarks or images), under what identifiers (typed names), where it lives across recycled Colab runtimes, or whether participants consent to it being committed to a possibly public repo. The 'never saved' frame statement would be false if recordings keep images.",
+      "remedy": "Store throws and landmark rows only, under anonymous ids, get each participant's consent before committing, and say where the files live."
+    },
+    {
+      "id": "R2-34",
+      "dimension": "clarity",
+      "severity": "minor",
+      "changed_text": "The proof that the bot works is the offline evidence",
+      "problem": "'The proof that the bot works is the offline evidence ... plus a pilot' overstates. The offline figures measure humans playing humans, and the pilot (3 matches x 20 rounds, about 60 rounds) has a 95% interval of roughly +/-12 points, so it cannot separate 40% from 33%; pooling rounds from 3 players also ignores clustering. Practice matches run 20 rounds, so their win rate includes later, better-informed rounds and is not the 8-round stage expectation.",
+      "remedy": "Call the offline figure evidence of predictability on unseen players, report the pilot with its interval as a check rather than a proof, report pilot rounds 1-8 separately, name the interval method, and run the pilot with players who have not heard the pitch (the on-stage classmate will have)."
+    },
+    {
+      "id": "R2-35",
+      "dimension": "clarity",
+      "severity": "minor",
+      "changed_text": "Luck is 33%. This was measured by replaying the 72 study players",
+      "problem": "'Luck is 33%' is the only baseline given for the early-round figures (about 40% for rounds 2-10, about 42% for rounds 2-20), against Premise 3's 'honest baselines everywhere' (luck and always-rock). Rock was 58.3% of first throws, so the always-rock rate for the same early rounds may exceed the 35.6% all-round figure, and the bot's early edge over it may be smaller than its edge over luck. I could not check this from the document.",
+      "remedy": "Show always-rock (and luck) for the same round windows next to each early-round accuracy, and adjust the 'what to expect' wording if the early edge over always-rock is small."
+    },
+    {
+      "id": "R2-36",
+      "dimension": "consistency",
+      "severity": "minor",
+      "changed_text": "both committed",
+      "problem": "The Personal table says its two scripts are 'both committed', but the repo is described as 'not yet initialised' and, checked on 2026-10-27, neither /media/psf/project/ML Project/mind-reader/tools/personal_check.py nor tools/rps_check.py exists (nor data/rps_human_games.csv), while Next Steps step 2 still says 'Write the tools/ scripts and commit both CSVs'. The measured table is therefore not reproducible from the repo yet.",
+      "remedy": "Reword to 'will be committed in step 2' or commit the scripts now, and make step 2 explicitly include them and the Personal and first-throw numbers."
+    },
+    {
+      "id": "R2-37",
+      "dimension": "clarity",
+      "severity": "minor",
+      "changed_text": "as k of n (for example",
+      "problem": "The report's 'mind-read moments' as k of n ('called 3 of 4 after-loss repeats') has no stated denominator: the bot's after-loss repeat predictions, or the player's after-loss repeats that the bot called. The announcement trigger ('a post-loss repeat') is likewise not defined as a rule on the previous result and the predicted shift.",
+      "remedy": "Define a moment as: previous result was a loss and the predicted shift was stay (plus the round-1 rock assumption); define n as the number of such calls and k as those where the player repeated, and say whether ties count."
+    },
+    {
+      "id": "R2-38",
+      "dimension": "clarity",
+      "severity": "minor",
+      "changed_text": "my friends were less predictable than the study",
+      "problem": "The second Assignment branch tells Krish to say 'my friends were less predictable than the study's players' whenever the interval does not sit above 33%. Failing to clear 33% does not show a difference from the study; that needs the interval to exclude 52.7%. At about 100 events the two nearly coincide, but with fewer (for example 29 of 70, interval about 31% to 53%) the interval still contains 52.7% and the line is unsupported. Mixing paper games against Krish with games against the bot in one pooled count also blurs the claim.",
+      "remedy": "Make the second line conditional on the interval's upper bound being below 52.7% (otherwise 'inconclusive, n too small'), state a minimum n, and keep one opponent type per pooled count."
+    },
+    {
+      "id": "R2-39",
+      "dimension": "completeness",
+      "severity": "minor",
+      "changed_text": "Its predictions must be identical to the offline model",
+      "problem": "Parity check 1 requires the live engine's predictions over a held-out player's 300 rounds to be 'identical to the offline model's', but the live path plays a rock assumption in round 1 and the Personal brain in round 2, where the offline model has no prediction, and it does not say which fitted model (the fold model or one trained on all 72 players) is compared. A literal assert fails on rounds 1-2 or compares different models.",
+      "remedy": "Restrict the assert to rounds 3-300 using the same fitted model object in both paths, and add a separate assert for the round-1 and round-2 rules."
+    }
+  ],
+  "prior": [
+    {
+      "id": "R1-1",
+      "status": "resolved",
+      "evidence": "Match and report now sets Stage mode at 8 rounds of about 8 s (3 s countdown, 1.5 s capture and reveal, 2 s taunt, 1 s pause) with speech mutable, Practice mode at 20 rounds for rehearsal and the pilot, and the run sheet re-timed (2:40 match of about 65 s, 30 s spare); the mid-match Personal switch was removed ('There is no planned mid-match switch') and the Live criterion names both matches. The announcement's missing time slot is a new defect, R2-2.",
+      "current_id": null
+    },
+    {
+      "id": "R1-2",
+      "status": "resolved",
+      "evidence": "'What to expect from a live match, said honestly' states about 40% (rounds 2-10) and 42% (rounds 2-20) against 33% luck with about +/-17 points of chance over 8 rounds; Match and report adds a pilot of at least 3 classmates reported as k of n with a 95% interval and a scripted 'If the bot loses on stage' response; Success Criteria includes the Pilot line.",
+      "current_id": null
+    },
+    {
+      "id": "R1-3",
+      "status": "resolved",
+      "evidence": "Part 2 now defines the Personal brain (inputs, a count table starting at 1 with Laplace smoothing, most-counted prediction, add-one update, works from round 2), reports accuracy for rounds 2-10 (40.0%) and 2-20 (42.4%) as well as longer windows, names the lab mapping (Naive Bayes, Lab 7), tests and rejects a prior from other players, and drops the mid-match switch. Residual precision gaps are R2-30 and R2-36.",
+      "current_id": null
+    },
+    {
+      "id": "R1-4",
+      "status": "resolved",
+      "evidence": "Round flow step 3 now captures a burst of 5 frames, allows one hand, accepts only if at least 3 of 5 agree with mean probability at least 0.7, otherwise shows 'Show me your hand' and replays without counting; step 5 adds correction buttons or keys 1/2/3 that overwrite the last score and history; the Live criterion tests at least 3 people and reports the misread rate. Refinements are R2-23 and R2-25.",
+      "current_id": null
+    },
+    {
+      "id": "R1-5",
+      "status": "resolved",
+      "evidence": "'History rules' define per-match history (reset on a new match, name only a label), round 1 as a rock assumption answered with paper, round 2 by the Personal brain, round 3 onwards by the selected brain, the shift-to-move conversion with a worked example, and that replays and rejected throws never enter history while a correction overwrites the last entry.",
+      "current_id": null
+    },
+    {
+      "id": "R1-6",
+      "status": "resolved",
+      "evidence": "Part 1 Features now state the invariances (pixel coordinates, wrist origin, rotation to the wrist-to-middle-knuckle axis, scale, handedness mirror, extension ratios); the Eyes live criterion is widened to at least 3 people, both hands, 2 lighting conditions and 10 throws per gesture; and Part 1b ('Our webcam data') gives a live-accuracy trigger, how recordings enter training and the new criterion (95% on held-out people). The CSV handedness inconsistency is a new defect, R2-1.",
+      "current_id": null
+    },
+    {
+      "id": "R1-7",
+      "status": "resolved",
+      "evidence": "Split now makes TensorFlow's official 2,520/372 split the headline, runs GridSearchCV and cross-validation inside the training set only, uses the 80/20 stratified split only inside training for the learning-curve validation, explains the near-duplicate leakage point alongside Part 2's player-level split, and binds the 95% criterion to the official test set.",
+      "current_id": null
+    },
+    {
+      "id": "R1-8",
+      "status": "resolved",
+      "evidence": "Find-S now runs on the four non-thumb finger booleans (thumb excluded and explained), with up above 1.15 and down below 0.95 and unclear examples excluded, prints only hypothesis-changing examples, states the expected [up, up, down, down], plans a second run with a single 1.0 threshold collapsing to '?' as the deliberate story, and has the spike check both outcomes.",
+      "current_id": null
+    },
+    {
+      "id": "R1-9",
+      "status": "resolved",
+      "evidence": "Approach B now has one trigger list (camera or invokeFunction failure, median shoot-to-reveal over 1.5 s, venue internet unconfirmed), decided once at the end of the spike (Next Steps step 1) with Krish owning the venue check; Open Questions repeats the same trigger.",
+      "current_id": null
+    },
+    {
+      "id": "R1-10",
+      "status": "resolved",
+      "evidence": "The Assignment now uses 3 friends x 100 rounds (about 100 post-loss events pooled), study-style columns, k of n counts, and a rule fixed in advance on whether the 95% interval sits above 33%; the old 'better viva answer' claim is gone. The wording of the second branch is R2-38.",
+      "current_id": null
+    },
+    {
+      "id": "R1-11",
+      "status": "resolved",
+      "evidence": "'Shared helpers and parity' requires one helpers cell (move encoding, history-to-features, relative/absolute conversion, landmarks-to-features with decode and mirroring) used by Parts 1-3, with two assert-based parity checks (300-round replay; 20 JPEG-encoded test images), and Success Criteria adds 'Parity: both parity asserts pass'. Details are R2-39.",
+      "current_id": null
+    },
+    {
+      "id": "R1-12",
+      "status": "persisting",
+      "evidence": "Datasets item 2 (35.7% rock) and Premise 3 and the baseline table (35.6% always-rock) are unchanged and still give no row set.",
+      "current_id": "R2-3"
+    },
+    {
+      "id": "R1-13",
+      "status": "persisting",
+      "evidence": "The Datasets column list still ends with 'input' and nowhere defines it or excludes it from the features.",
+      "current_id": "R2-4"
+    },
+    {
+      "id": "R1-14",
+      "status": "persisting",
+      "evidence": "Notebook structure 0 still says 'pip install mediapipe' unpinned; the spike's 'with a pinned version' is not carried into the install cell, and no checksum or restart note exists.",
+      "current_id": "R2-5"
+    },
+    {
+      "id": "R1-15",
+      "status": "persisting",
+      "evidence": "No first-cell data fetch exists in Notebook structure, and the public-repo question is still open.",
+      "current_id": "R2-6"
+    },
+    {
+      "id": "R1-16",
+      "status": "persisting",
+      "evidence": "Viva prep still says 'also published as a readable web page'; the Distribution Plan has no hosting step.",
+      "current_id": "R2-7"
+    },
+    {
+      "id": "R1-17",
+      "status": "persisting",
+      "evidence": "The Screen bullets still cite 'mockup B' and 'mockup C', and CHANAKYA is not introduced.",
+      "current_id": "R2-8"
+    },
+    {
+      "id": "R1-18",
+      "status": "persisting",
+      "evidence": "The Screen still lists health bars; Match and report has no damage, tie or winner rule.",
+      "current_id": "R2-9"
+    },
+    {
+      "id": "R1-19",
+      "status": "persisting",
+      "evidence": "Match and report still replays the match through every brain and keeps the leaderboard without a metric or small-sample note.",
+      "current_id": "R2-10"
+    },
+    {
+      "id": "R1-20",
+      "status": "persisting",
+      "evidence": "Success Criteria still say 'under about 5 minutes' and 'answer a 10-question mock viva' with no pass mark; the Brain protocol, widened Eyes live test, 1.5 s median and lock test were fixed.",
+      "current_id": "R2-11"
+    },
+    {
+      "id": "R1-21",
+      "status": "persisting",
+      "evidence": "Part 2 still says 'a subsample or a small grid' with no size, and no timed full run is in the spike.",
+      "current_id": "R2-12"
+    },
+    {
+      "id": "R1-22",
+      "status": "persisting",
+      "evidence": "The spike was widened, but Next Steps still has no Colab checkpoint between the spike and step 11 and no stubbed harness, and speech is tested only on the laptop speakers.",
+      "current_id": "R2-13"
+    },
+    {
+      "id": "R1-24",
+      "status": "persisting",
+      "evidence": "Round flow step 4 still shows a percentage per brain, and Part 1 still says predict_proba, without stating what Perceptron, Random or Decision Tree show.",
+      "current_id": "R2-14"
+    },
+    {
+      "id": "R1-25",
+      "status": "persisting",
+      "evidence": "Part 2's model list still has no encoding or ColumnTransformer, and the accuracy table does not state the absolute or relative target (only the live brains now say they predict a shift).",
+      "current_id": "R2-15"
+    },
+    {
+      "id": "R1-26",
+      "status": "persisting",
+      "evidence": "'What Makes This Cool' still promises a reason for the Perceptron failure and none is given.",
+      "current_id": "R2-16"
+    },
+    {
+      "id": "R1-27",
+      "status": "persisting",
+      "evidence": "The Problem Statement and Datasets still attribute the 52.7% to the study and give no reproducible check or sample note.",
+      "current_id": "R2-17"
+    },
+    {
+      "id": "R1-28",
+      "status": "persisting",
+      "evidence": "Mechanics still says 'Frames are processed in memory and never saved' with no consent prompt or pre-commit output check.",
+      "current_id": "R2-18"
+    },
+    {
+      "id": "R1-29",
+      "status": "persisting",
+      "evidence": "Mechanics and Round flow still define no input limits, allow-list or text rendering for the invokeFunction calls.",
+      "current_id": "R2-19"
+    },
+    {
+      "id": "R1-30",
+      "status": "persisting",
+      "evidence": "'Show me your hand' is still the only error path; no camera-denied, kernel or speech failure state and no non-camera mode.",
+      "current_id": "R2-20"
+    },
+    {
+      "id": "R1-31",
+      "status": "persisting",
+      "evidence": "No priority or cut line exists, the deadline question remains open, and Next Steps grew from 9 to 11 steps.",
+      "current_id": "R2-21"
+    },
+    {
+      "id": "R1-32",
+      "status": "persisting",
+      "evidence": "The Distribution Plan is unchanged; only the professor-acceptance question was added to Approach B and Open Questions.",
+      "current_id": "R2-22"
+    },
+    {
+      "id": "R1-23",
+      "status": "resolved",
+      "evidence": "The live label is now single-flight, at most 4 per second, paused during countdown and capture, and the spike times the burst round trip with the preview running.",
+      "current_id": null
+    }
+  ]
+}

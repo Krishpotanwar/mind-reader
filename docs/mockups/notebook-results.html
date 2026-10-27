@@ -1,0 +1,91 @@
+<h2>Where the lab-style training results go</h2>
+<p class="subtitle">The notebook trains two models, each on its own real public dataset. Each part runs the same steps as your labs: load the data, explore it, clean it, split it, train several algorithms, then compare accuracy, confusion matrices and cross-validation. The live game comes last and uses the winners.</p>
+
+<style>
+  .nb{background:#fff;color:#1d1d1f;border:1px solid #dadce0;border-radius:10px;font-family:system-ui;overflow:hidden}
+  .nb h4{margin:0;padding:10px 14px;background:#f1f3f4;font-size:13px;letter-spacing:.04em;border-bottom:1px solid #dadce0}
+  .cell{display:grid;grid-template-columns:62px 1fr;border-bottom:1px solid #eee}
+  .cell .n{color:#5f6368;font:12px ui-monospace,monospace;padding:10px 6px;text-align:right}
+  .cell pre{margin:0;padding:10px 12px;font:12.5px/1.45 ui-monospace,Menlo,monospace;background:#f8f9fa;white-space:pre-wrap;color:#1d1d1f}
+  .out{grid-column:2;padding:8px 12px 12px;font-size:13px}
+  .tbl{border-collapse:collapse;font-size:12.5px}
+  .tbl td,.tbl th{border-bottom:1px solid #eee;padding:4px 10px;text-align:right}
+  .tbl th{color:#5f6368;font-weight:600}
+  .tbl td:first-child,.tbl th:first-child{text-align:left}
+  .kw{color:#a626a4}.fn{color:#4078f2}.st{color:#50a14f}.cm{color:#a0a1a7}
+  .tag{display:inline-block;font-size:11px;padding:2px 8px;border-radius:999px;margin-left:6px}
+  .real{background:#e6f4ea;color:#137333}.exp{background:#fef7e0;color:#b06000}
+</style>
+
+<div class="split">
+  <!-- PART 1: EYES -->
+  <div class="nb">
+    <h4>PART 1 &middot; THE EYES: recognising your hand <span class="tag exp">numbers expected</span></h4>
+    <div class="cell"><div class="n">[3]:</div><pre><span class="cm"># 2,892 photos of hands (Google/TensorFlow RPS dataset)</span>
+<span class="cm"># OpenCV opens each photo, MediaPipe finds 21 points on the hand</span>
+df = pd.<span class="fn">read_csv</span>(<span class="st">"hand_points.csv"</span>)
+df.<span class="fn">head</span>()</pre>
+      <div class="out"><table class="tbl"><tr><th></th><th>x0</th><th>y0</th><th>x1</th><th>&hellip;</th><th>y20</th><th>label</th></tr>
+      <tr><td>0</td><td>0.00</td><td>0.00</td><td>-0.21</td><td>&hellip;</td><td>-0.88</td><td>paper</td></tr>
+      <tr><td>1</td><td>0.00</td><td>0.00</td><td>-0.18</td><td>&hellip;</td><td>-0.31</td><td>rock</td></tr>
+      <tr><td>2</td><td>0.00</td><td>0.00</td><td>-0.24</td><td>&hellip;</td><td>-0.35</td><td>scissors</td></tr></table></div></div>
+    <div class="cell"><div class="n">[7]:</div><pre><span class="cm"># Lab 3: Find-S learns what "scissors" means from finger up/down</span>
+<span class="fn">find_s</span>(fingers, labels==<span class="st">"scissors"</span>)</pre>
+      <div class="out" style="font-family:ui-monospace,monospace;font-size:12.5px">Final hypothesis: ['?', 'up', 'up', 'down', 'down']<br><span style="color:#5f6368">thumb, index, middle, ring, pinky</span></div></div>
+    <div class="cell"><div class="n">[9]:</div><pre><span class="kw">for</span> name, model <span class="kw">in</span> models.<span class="fn">items</span>():
+    model.<span class="fn">fit</span>(X_train, y_train)
+    results[name] = <span class="fn">accuracy_score</span>(y_test, model.<span class="fn">predict</span>(X_test))</pre>
+      <div class="out"><table class="tbl"><tr><th>Algorithm (lab)</th><th>Accuracy</th><th>F1</th></tr>
+      <tr><td>SVM (Lab 8)</td><td><b>~98%</b></td><td>~0.98</td></tr>
+      <tr><td>Logistic Regression (Lab 6)</td><td>~96%</td><td>~0.96</td></tr>
+      <tr><td>Perceptron (Lab 6)</td><td>~94%</td><td>~0.94</td></tr>
+      <tr><td>Decision Tree (Lab 4)</td><td>~92%</td><td>~0.92</td></tr>
+      <tr><td>Naive Bayes (Lab 7)</td><td>~88%</td><td>~0.88</td></tr></table>
+      <div style="margin-top:8px;display:flex;gap:14px;align-items:center">
+        <svg viewBox="0 0 120 120" width="120" height="120"><g font-size="11" text-anchor="middle" font-family="system-ui">
+          <rect x="20" y="10" width="30" height="30" fill="#1a73e8"/><rect x="50" y="10" width="30" height="30" fill="#e8f0fe"/><rect x="80" y="10" width="30" height="30" fill="#e8f0fe"/>
+          <rect x="20" y="40" width="30" height="30" fill="#e8f0fe"/><rect x="50" y="40" width="30" height="30" fill="#1a73e8"/><rect x="80" y="40" width="30" height="30" fill="#d2e3fc"/>
+          <rect x="20" y="70" width="30" height="30" fill="#e8f0fe"/><rect x="50" y="70" width="30" height="30" fill="#d2e3fc"/><rect x="80" y="70" width="30" height="30" fill="#1a73e8"/>
+          <text x="35" y="29" fill="#fff">124</text><text x="65" y="29">0</text><text x="95" y="29">0</text>
+          <text x="35" y="59">0</text><text x="65" y="59" fill="#fff">121</text><text x="95" y="59">3</text>
+          <text x="35" y="89">1</text><text x="65" y="89">2</text><text x="95" y="89" fill="#fff">121</text>
+          <text x="35" y="115" font-size="9">rock</text><text x="65" y="115" font-size="9">paper</text><text x="95" y="115" font-size="9">sciss.</text></g></svg>
+        <span style="font-size:12px;color:#5f6368">Confusion matrix of the best model, plus GridSearchCV and 5-fold cross-validation, the same as Lab 4 and Lab 8.</span>
+      </div></div></div>
+  </div>
+
+  <!-- PART 2: BRAIN -->
+  <div class="nb">
+    <h4>PART 2 &middot; THE BRAIN: predicting your next move <span class="tag real">real numbers, measured today</span></h4>
+    <div class="cell"><div class="n">[14]:</div><pre><span class="cm"># 21,600 real moves: 72 people x 300 rounds (Wang, Xu &amp; Zhou 2014)</span>
+games = pd.<span class="fn">read_csv</span>(<span class="st">"rps_human_games.csv"</span>)
+games.<span class="fn">head</span>()</pre>
+      <div class="out"><table class="tbl"><tr><th></th><th>id</th><th>period</th><th>choice</th><th>other.choice</th><th>result</th></tr>
+      <tr><td>0</td><td>1</td><td>1</td><td>s</td><td>s</td><td>tie</td></tr>
+      <tr><td>1</td><td>1</td><td>2</td><td>s</td><td>r</td><td>lose</td></tr>
+      <tr><td>2</td><td>1</td><td>3</td><td>s</td><td>p</td><td>win</td></tr></table></div></div>
+    <div class="cell"><div class="n">[16]:</div><pre><span class="cm"># EDA: do people repeat their last move?</span>
+games.<span class="fn">groupby</span>(<span class="st">"last_result"</span>).repeated.<span class="fn">mean</span>().<span class="fn">plot</span>.<span class="fn">bar</span>()</pre>
+      <div class="out"><svg viewBox="0 0 300 120" style="width:100%;max-width:320px">
+        <line x1="10" y1="73" x2="290" y2="73" stroke="#9aa0a6" stroke-dasharray="5 4"/><text x="288" y="68" font-size="10" text-anchor="end" fill="#5f6368">luck 33%</text>
+        <rect x="30" y="47" width="50" height="63" fill="#1a73e8"/><text x="55" y="42" font-size="11" text-anchor="middle">36%</text><text x="55" y="118" font-size="10" text-anchor="middle">after win</text>
+        <rect x="125" y="34" width="50" height="76" fill="#1a73e8"/><text x="150" y="29" font-size="11" text-anchor="middle">43%</text><text x="150" y="118" font-size="10" text-anchor="middle">after tie</text>
+        <rect x="220" y="5" width="50" height="105" fill="#d93025"/><text x="245" y="18" font-size="11" text-anchor="middle" fill="#fff">53%</text><text x="245" y="118" font-size="10" text-anchor="middle">after LOSS</text>
+      </svg><div style="font-size:12px;color:#5f6368">After losing, people stubbornly repeat the same move 53% of the time.</div></div></div>
+    <div class="cell"><div class="n">[19]:</div><pre><span class="cm"># tested on players the model has NEVER seen (GroupKFold)</span>
+cross_val_score(model, X, y, cv=GroupKFold(<span class="st">5</span>), groups=ids)</pre>
+      <div class="out"><table class="tbl"><tr><th>Algorithm (lab)</th><th>Accuracy</th></tr>
+      <tr><td>SVM (Lab 8)</td><td><b>45.3%</b></td></tr>
+      <tr><td>Decision Tree (Lab 4)</td><td><b>45.3%</b></td></tr>
+      <tr><td>Naive Bayes (Lab 7)</td><td>44.1%</td></tr>
+      <tr><td>Logistic Regression (Lab 6)</td><td>43.9%</td></tr>
+      <tr><td>Perceptron (Lab 6)</td><td>36.7%</td></tr>
+      <tr><td style="color:#5f6368">"Always rock" baseline</td><td style="color:#5f6368">35.6%</td></tr>
+      <tr><td style="color:#5f6368">Pure luck</td><td style="color:#5f6368">33.3%</td></tr></table>
+      <div style="font-size:12px;color:#5f6368;margin-top:6px">When it learns <i>one</i> person live, the bot gets sharper: 46% over the first 50 rounds, 49% by round 150, 53% by round 300.</div></div></div>
+  </div>
+</div>
+
+<div class="section" style="margin-top:1.5rem">
+  <div class="label">Then Part 3: the live game (the layout you pick from the previous screen) uses the best "eyes" model and the best "brain" model</div>
+</div>
