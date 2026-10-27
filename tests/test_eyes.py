@@ -1,4 +1,5 @@
 import base64
+import contextlib
 import hashlib
 import os
 import zipfile
@@ -137,10 +138,99 @@ GARBAGE = {
 }
 
 
+@pytest.mark.parametrize("max_side", [None, 1280])  # with a limit the header is read first, and must refuse the same things
 @pytest.mark.parametrize("bad", list(GARBAGE.values()), ids=list(GARBAGE))
-def test_decode_jpeg_rejects_garbage(bad):
+def test_decode_jpeg_rejects_garbage(bad, max_side):
     with pytest.raises(ValueError):
-        eyes.decode_jpeg(bad)
+        eyes.decode_jpeg(bad, max_side)
+
+
+def jpeg_bytes(width=64, height=48):
+    """The bytes of a small JPEG, as a file would hold them."""
+    return base64.b64decode(eyes.encode_jpeg(np.zeros((height, width, 3), np.uint8)).split(",", 1)[1])
+
+
+def test_jpeg_size_reads_width_then_height_from_the_header():
+    assert eyes.jpeg_size(jpeg_bytes(64, 48)) == (64, 48)
+    assert eyes.jpeg_size(jpeg_bytes(48, 64)) == (48, 64)
+
+
+def test_decode_jpeg_refuses_a_longer_side_than_max_side():
+    url = eyes.encode_jpeg(np.zeros((30, 100, 3), np.uint8))
+    assert eyes.decode_jpeg(url, max_side=100).shape == (30, 100, 3)  # the limit itself is allowed
+    with pytest.raises(ValueError, match="100 x 30 pixels; the longest side may be 99"):
+        eyes.decode_jpeg(url, max_side=99)
+
+
+def test_a_header_cut_off_before_the_size_is_a_value_error():
+    raw = jpeg_bytes()
+    size_end = raw.index(b"\xff\xc0") + 9  # the frame header's marker, length, precision, height and width
+    for cut in range(3, size_end):  # from just after the JPEG marker to one byte short of the size
+        with pytest.raises(ValueError):
+            eyes.jpeg_size(raw[:cut])
+        with pytest.raises(ValueError):
+            eyes.decode_jpeg(b64_url(raw[:cut]), max_side=1280)
+
+
+@pytest.mark.parametrize("extra", [
+    b"\xff\xfe\x00\x06abcd",  # a comment
+    b"\xff\xdd\x00\x04\x00\x04",  # a restart interval
+    b"\xff\xcc\x00\x04\x00\x00",  # arithmetic conditioning
+    b"\xff\xe1\x00\x0a" + bytes(8),  # EXIF-like application data
+    b"\xff\xe2\x01\x00" + bytes(254),  # ICC-profile-like application data (the length of 256 counts its own 2 bytes)
+], ids=["comment", "restart interval", "arithmetic conditioning", "APP1", "APP2"])
+def test_jpeg_size_hops_over_the_segments_real_files_have_before_the_frame_header(extra):
+    raw = jpeg_bytes(64, 48)
+    sof = raw.index(b"\xff\xc0")
+    assert eyes.jpeg_size(raw[:sof] + extra + raw[sof:]) == (64, 48)
+
+
+def test_jpeg_size_hops_over_a_huffman_table_that_comes_before_the_frame_header():
+    raw = jpeg_bytes(64, 48)
+    sof, table = raw.index(b"\xff\xc0"), raw.index(b"\xff\xc4")  # the table follows the frame header in these files
+    table_end = table + 2 + int.from_bytes(raw[table + 2:table + 4], "big")
+    assert eyes.jpeg_size(raw[:sof] + raw[table:table_end] + raw[sof:table] + raw[table_end:]) == (64, 48)
+
+
+def test_jpeg_size_reads_progressive_and_restart_interval_files():
+    bgr = np.zeros((48, 64, 3), np.uint8)
+    for option in (cv2.IMWRITE_JPEG_PROGRESSIVE, cv2.IMWRITE_JPEG_RST_INTERVAL):
+        assert eyes.jpeg_size(cv2.imencode(".jpg", bgr, [option, 1])[1].tobytes()) == (64, 48)
+
+
+BIG_SOF = b"\xff\xc0\x00\x0b\x08\x4e\x20\x4e\x20\x01\x01\x11\x00"  # a frame header that claims 20000 x 20000
+SMALL_SOF = b"\xff\xc0\x00\x0b\x08\x00\x10\x00\x10\x01\x01\x11\x00"  # one that claims 16 x 16
+ODD_HEADERS = {
+    "a segment shorter than its own length field": b"\xff\xd8\xff\xe0\x00\x01" + bytes(20),
+    "a scan before any frame header": b"\xff\xd8\xff\xda\x00\x08" + bytes(20),
+    "fill bytes before a marker": b"\xff\xd8\xff\xff\xe0\x00\x04" + bytes(20),
+    "junk between segments": b"\xff\xd8\xff\xe0\x00\x04\x00\x00junk" + SMALL_SOF,
+    "no frame header at all": b"\xff\xd8" + b"\xff\xe1\x00\x0a" + bytes(8) + b"\xff\xe1\x00\x0a" + bytes(8),
+    # A restart marker (FF D0) has no length. The decoder goes on to BIG_SOF, but a reader that took the next two bytes
+    # (FF C0 = 65472) as its length would skip ahead and report SMALL_SOF, so the size check would be fooled.
+    "a restart marker hiding the real frame header": b"\xff\xd8\xff\xd0" + BIG_SOF + bytes(65476 - 4 - len(BIG_SOF)) + SMALL_SOF,
+    # The decoder skips stray bytes up to the next FF, so it reads BIG_SOF here. A reader that did not insist on FF at the
+    # start of each segment would take 00 DB FF C0 as a table 65472 bytes long and report SMALL_SOF.
+    "stray bytes that look like a segment hiding the real frame header":
+        b"\xff\xd8\xff\xfe\x00\x02" + b"\x00\xdb" + BIG_SOF + bytes(65480 - 8 - len(BIG_SOF)) + SMALL_SOF,
+}
+
+
+@pytest.mark.parametrize("raw", list(ODD_HEADERS.values()), ids=list(ODD_HEADERS))
+def test_jpeg_size_refuses_an_odd_header(raw):
+    with pytest.raises(ValueError):
+        eyes.jpeg_size(raw)
+
+
+def test_jpeg_size_only_ever_raises_value_error():
+    rng = np.random.default_rng(0)
+    real = jpeg_bytes()[:200]
+    for _ in range(3000):
+        damaged = bytearray(real)
+        for place in rng.integers(2, len(damaged), 4):
+            damaged[place] = rng.integers(0, 256)
+        with contextlib.suppress(ValueError):  # any other exception fails the test
+            eyes.jpeg_size(bytes(damaged))
 
 
 def test_predict_gesture_uses_mirror_average():
@@ -309,9 +399,17 @@ def csv_path(logreg, row):
     return extension_ratios(points), eyes.predict_gesture(logreg, points)[0]
 
 
-def live_path(reader, logreg, bgr):
-    """What the game makes of the same image: JPEG -> decode -> landmarks -> (ratios, label), or None if no hand."""
-    decoded = eyes.decode_jpeg(eyes.encode_jpeg(bgr))
+def through_jpeg(bgr):
+    return eyes.decode_jpeg(eyes.encode_jpeg(bgr))
+
+
+def through_png(bgr):  # lossless, so any gap left is the pipeline's, not the codec's
+    return cv2.imdecode(cv2.imencode(".png", bgr)[1], cv2.IMREAD_COLOR)
+
+
+def live_path(reader, logreg, bgr, round_trip):
+    """What the game makes of the same image: round trip -> landmarks -> (ratios, label), or None if no hand."""
+    decoded = round_trip(bgr)
     landmarks = reader.landmarks(cv2.cvtColor(decoded, cv2.COLOR_BGR2RGB))
     if landmarks is None:
         return None
@@ -319,11 +417,10 @@ def live_path(reader, logreg, bgr):
     return extension_ratios(points), eyes.predict_gesture(logreg, points)[0]
 
 
-@pytest.fixture(scope="module", params=[False, True], ids=["as_is", "flipped"])
-def live_outcomes(request, logreg):
-    """20 test images through the live path, as they are or flipped left to right (request.param).
+def live_outcomes(logreg, round_trip, flip=False):
+    """20 test images through the live path, as they are or flipped left to right.
 
-    One (hand found, same label as the CSV path, largest ratio difference to the CSV row) per image."""
+    One (hand found, same label as the CSV path, largest ratio gap to the CSV row) per image."""
     rows = pd.read_csv(HAND_CSV)
     sample = rows[rows["split"] == "test"].sample(n=20, random_state=0)
     outcomes = []
@@ -331,7 +428,7 @@ def live_outcomes(request, logreg):
         for _, row in sample.iterrows():
             png = z.read(f"rps-test-set/{row['label']}/{row['file']}")  # the image stays in memory, never on disk
             bgr = cv2.imdecode(np.frombuffer(png, np.uint8), cv2.IMREAD_COLOR)
-            live = live_path(reader, logreg, cv2.flip(bgr, 1) if request.param else bgr)
+            live = live_path(reader, logreg, cv2.flip(bgr, 1) if flip else bgr, round_trip)
             if live is None:
                 outcomes.append((False, False, float("inf")))
             else:
@@ -340,19 +437,22 @@ def live_outcomes(request, logreg):
     return outcomes
 
 
+@pytest.fixture(scope="module", params=[False, True], ids=["as_is", "flipped"])
+def jpeg_outcomes(request, logreg):
+    return live_outcomes(logreg, through_jpeg, request.param)
+
+
+# Labels only for the JPEG path. Measured on these 20 images: JPEG quality 80 moves the ratios by up to 0.103 (a 0.02 bar
+# failed 8 of 20), and flipping moves them by up to 0.21 even as lossless PNG, since MediaPipe's landmarks on a flipped
+# image are not the mirror of the original's. Do not add a ratio bar here; the lossless test below is the exact one.
 @needs_live_data
-def test_live_path_matches_csv(live_outcomes):
-    agree = sum(found and same for found, same, _ in live_outcomes)
+def test_live_path_matches_csv(jpeg_outcomes):
+    agree = sum(found and same for found, same, _ in jpeg_outcomes)
     assert agree >= 19, f"hand found with the CSV pipeline's label in only {agree} of 20 images"
 
 
 @needs_live_data
-@pytest.mark.xfail(strict=True, reason=(
-    "measured miss, bar kept. As is: JPEG quality 80 moves the ratios by up to 0.103 (12 of 20 images within 0.02; a "
-    "lossless PNG gives 0.0). Flipped: 2 of 20 within 0.02, up to 0.109, and MediaPipe misses by up to 0.21 even "
-    "without JPEG, because its landmarks on a flipped image are not the mirror of those on the original. "
-    "Labels agree on 20 of 20 either way."))
-def test_live_path_ratios_match_csv(live_outcomes):
-    close = sum(found and same and gap <= 0.02 for found, same, gap in live_outcomes)
-    worst = max(gap for _, _, gap in live_outcomes)
-    assert close >= 19, f"only {close} of 20 images have a hand, the same label and ratios within 0.02 (largest gap {worst:.3f})"
+def test_lossless_live_path_gives_the_csv_ratios(logreg):
+    outcomes = live_outcomes(logreg, through_png)
+    assert all(found for found, _, _ in outcomes), "a hand was not found in every image"
+    assert max(gap for _, _, gap in outcomes) < 1e-3  # the CSV keeps 6 decimals; the measured largest gap is 5.6e-06

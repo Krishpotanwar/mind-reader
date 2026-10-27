@@ -18,13 +18,9 @@ def check_frame(frame, label: str) -> np.ndarray:
     if len(frame) > MAX_FRAME_CHARS:  # judged before decoding, so a huge string is never handed to the decoder
         raise ValueError(f"{label} is {len(frame)} characters long; the limit is {MAX_FRAME_CHARS}")
     try:
-        bgr = decode_jpeg(frame)
+        return decode_jpeg(frame, MAX_SIDE)  # the size is read from the header, so a huge frame never gets its pixel buffer
     except ValueError as problem:
         raise ValueError(f"{label}: {problem}") from None
-    height, width = bgr.shape[:2]
-    if max(height, width) > MAX_SIDE:
-        raise ValueError(f"{label} is {width} x {height} pixels; the longest side may be {MAX_SIDE}")
-    return bgr
 
 
 def validate_frames(frames: list) -> list[np.ndarray]:
@@ -36,8 +32,13 @@ def validate_frames(frames: list) -> list[np.ndarray]:
 
 
 def clean_name(name: str) -> str:
-    """A player's name with control, format, surrogate, private-use and unassigned characters removed, trimmed to MAX_NAME."""
+    """A player's name with control, format, surrogate, private-use, unassigned and line-separator characters removed,
+    trimmed to MAX_NAME. Only the first 10 * MAX_NAME characters are looked at."""
     if not isinstance(name, str):
         raise ValueError("a name must be text")
-    kept = "".join(char for char in name if not unicodedata.category(char).startswith("C"))  # C... = every kind of non-text
-    return kept.strip()[:MAX_NAME].strip()
+    kept = []
+    for char in name[:10 * MAX_NAME]:  # cut first, so a name of millions of characters costs nothing to scan
+        category = unicodedata.category(char)
+        if not category.startswith("C") and category not in ("Zl", "Zp"):  # C... is non-text; Zl, Zp split lines in a log
+            kept.append(char)
+    return "".join(kept).strip()[:MAX_NAME].strip()

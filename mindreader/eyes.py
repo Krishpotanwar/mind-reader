@@ -66,8 +66,26 @@ CONNECTIONS = (  # the bones: pairs of landmark points. 0 is the wrist, then fou
 )
 
 
-def decode_jpeg(data_url: str) -> np.ndarray:
-    """A JPEG as a data URL (or bare base64) -> a BGR image. Raises ValueError for anything that is not a good JPEG."""
+def jpeg_size(raw: bytes) -> tuple[int, int]:
+    """(width, height) from a JPEG's frame header, read without decoding any pixels. ValueError if the header is cut off or odd.
+
+    Only the segments that real files put before the frame header (tables, comments, application data) are hopped over.
+    Anything else is refused, so this reader and the decoder cannot disagree about where the frame header is."""
+    i = 2  # past the FF D8 start marker
+    while i + 9 <= len(raw) and raw[i] == 0xFF:  # a segment is FF, a marker byte, a 2-byte length that counts itself, then data
+        marker, length = raw[i + 1], int.from_bytes(raw[i + 2:i + 4], "big")
+        if 0xC0 <= marker <= 0xCF and marker not in (0xC4, 0xC8, 0xCC):  # the frame header: precision, height, width
+            return int.from_bytes(raw[i + 7:i + 9], "big"), int.from_bytes(raw[i + 5:i + 7], "big")
+        if not (marker in (0xC4, 0xCC, 0xDB, 0xDD, 0xFE) or 0xE0 <= marker <= 0xEF):  # tables, comment, application data
+            break
+        i += 2 + length  # always forward, so the loop ends
+    raise ValueError("the JPEG header is cut off or not one this game reads")
+
+
+def decode_jpeg(data_url: str, max_side: int | None = None) -> np.ndarray:
+    """A JPEG as a data URL (or bare base64) -> a BGR image. Raises ValueError for anything that is not a good JPEG.
+
+    With max_side, a JPEG whose header declares a longer side is refused before any pixels are allocated."""
     if not isinstance(data_url, str):
         raise ValueError("a JPEG must be given as a string")
     if data_url.startswith("data:"):
@@ -76,8 +94,12 @@ def decode_jpeg(data_url: str) -> np.ndarray:
         raw = base64.b64decode(data_url, validate=True)
     except ValueError:  # binascii.Error is a ValueError
         raise ValueError("not valid base64") from None
-    if not raw.startswith(JPEG_MARKER):  # so only JPEG bytes ever reach OpenCV's decoder
+    if not raw.startswith(JPEG_MARKER):  # so only JPEG bytes ever reach a JPEG parser
         raise ValueError("not a JPEG")
+    if max_side is not None:
+        width, height = jpeg_size(raw)
+        if max(width, height) > max_side:
+            raise ValueError(f"{width} x {height} pixels; the longest side may be {max_side}")
     try:
         bgr = cv2.imdecode(np.frombuffer(raw, np.uint8), cv2.IMREAD_COLOR)
     except cv2.error:

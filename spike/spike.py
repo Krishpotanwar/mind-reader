@@ -184,16 +184,27 @@ function stopCamera() {
 
 $('consent-text').textContent = CONSENT;
 $('agree').onclick = async () => {
+  $('agree').disabled = true;  // one click, one camera: a second click would lose the first stream and leave it on
   try {
     stream = await navigator.mediaDevices.getUserMedia({video: {width: {ideal: 640}, height: {ideal: 480}}});
   } catch (error) {
     say(BLOCKED);
+    $('agree').disabled = false;  // so that a blocked camera can retry
     return;
   }
   $('consent').hidden = true;
   $('stage').hidden = false;
-  $('video').srcObject = stream;
-  await $('video').play();
+  try {
+    $('video').srcObject = stream;
+    await $('video').play();
+  } catch (error) {
+    stopCamera();  // the camera light must not stay on
+    $('stage').hidden = true;
+    $('consent').hidden = false;
+    $('agree').disabled = false;
+    say('The camera would not play: ' + why(error));
+    return;
+  }
   $('controls').hidden = false;  // only once frames are flowing
   say('');
   onCameraOn();
@@ -203,10 +214,15 @@ __SCRIPT__
 """
 
 
+def js_string(text):
+    """A Python string as a JavaScript string for inside <script>. No "<" is left, so no </script> or <!-- can end the script."""
+    return json.dumps(text).replace("<", "\\u003c")
+
+
 def show_page(controls_html, script):
     """Show the consent box, the mirrored preview and `controls_html`. `script` must define onCameraOn()."""
     page = PAGE.replace("__CONTROLS__", controls_html).replace("__SCRIPT__", script)
-    display(HTML(page.replace("__CONSENT__", json.dumps(CONSENT)).replace("__BLOCKED__", json.dumps(BLOCKED))))
+    display(HTML(page.replace("__CONSENT__", js_string(CONSENT)).replace("__BLOCKED__", js_string(BLOCKED))))
 
 
 BURSTS_JS = r"""
@@ -217,19 +233,24 @@ function onCameraOn() {
 $('run').onclick = async () => {
   $('run').disabled = true;
   const times = [], problems = [];
-  for (let i = 1; i <= 20; i++) {
-    say('Burst ' + i + ' of 20');
-    const frames = await burst();
-    const start = performance.now();  // times only the call to Python
-    try {
-      await call('spike.burst', [frames]);
-      times.push(performance.now() - start);
-    } catch (error) {
-      problems.push('burst ' + i + ': ' + why(error));
+  try {
+    for (let i = 1; i <= 20; i++) {
+      say('Burst ' + i + ' of 20');
+      const frames = await burst();
+      const start = performance.now();  // times only the call to Python
+      try {
+        await call('spike.burst', [frames]);
+        times.push(performance.now() - start);
+      } catch (error) {
+        problems.push('burst ' + i + ': ' + why(error));
+      }
+      await sleep(300);
     }
-    await sleep(300);
+  } catch (error) {
+    problems.push('stopped early: ' + why(error));
+  } finally {
+    stopCamera();  // however the loop ends, the camera light goes off and the preview stops
   }
-  stopCamera();
   say('Done.');
   let text = problems.length + ' of 20 bursts failed' + (problems.length ? ': ' + problems.join('; ') : '') + '.';
   try {
