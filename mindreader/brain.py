@@ -139,13 +139,18 @@ def decide(history: list[tuple[int, int]], brain_name: str, brains: dict) -> dic
     return {"bot_move": beats(predicted), "predicted_move": predicted, "prob": prob, "source": source}
 
 
-def replay_accuracy(games: pd.DataFrame, brain, last_round: int) -> float:
+def replay_hits(games: pd.DataFrame, brain, last_round: int) -> pd.DataFrame:
     """Replay every player's rounds 2..last_round, the brain seeing only the rounds before each one.
-    Returns the share of rounds where the move it predicted was the move thrown."""
-    hits = []
+    One row per prediction: the round number, and hit = 1 if the move it predicted was the move thrown, else 0."""
+    rows = []
     for _, player in games.groupby("id"):
         history = list(zip(player["c"].tolist(), player["o"].tolist()))
         for round_number in range(2, last_round + 1):
             predicted, _ = brain.predict(history[: round_number - 1])
-            hits.append(predicted == history[round_number - 1][0])
-    return float(np.mean(hits))
+            rows.append((round_number, int(predicted == history[round_number - 1][0])))
+    return pd.DataFrame(rows, columns=["round", "hit"])
+
+
+def replay_accuracy(games: pd.DataFrame, brain, last_round: int) -> float:
+    """The share of rounds 2..last_round where the brain's predicted move was the move thrown."""
+    return float(replay_hits(games, brain, last_round)["hit"].mean())

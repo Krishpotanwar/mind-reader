@@ -5,7 +5,7 @@ import pandas as pd
 import pytest
 
 from mindreader.brain import (FEATURES, ModelBrain, PersonalBrain, RandomBrain, add_features, brain_pipeline, decide,
-                              facts, history_features, load_games, replay_accuracy)
+                              facts, history_features, load_games, replay_accuracy, replay_hits)
 
 # scikit-learn 1.9 warns that SVC(probability=True) goes away in 1.11. The brief (D13: the SVM shows a percentage) needs it, so only the SVM case may warn.
 SVM_WARNING = pytest.mark.filterwarnings("ignore:The `probability` parameter was deprecated")
@@ -83,6 +83,24 @@ def test_history_features_matches_add_features(games, rows, period):
 def test_personal_brain_replay_matches_measured(games):
     assert replay_accuracy(games, PersonalBrain(), 10) == pytest.approx(0.400, abs=0.005)
     assert replay_accuracy(games, PersonalBrain(), 20) == pytest.approx(0.424, abs=0.005)
+
+
+class RepeatLastMove:
+    """A stand-in brain that always predicts the player's last move again."""
+
+    def predict(self, history):
+        return history[-1][0], None
+
+
+def test_replay_hits_hand_worked_game():
+    # Player 1 throws 0, 0, 1, 1 and player 2 throws 2, 1, 1, 0. Repeating the last move is right on rounds 2 and 4
+    # for player 1 (0 then 0, 1 then 1) and on round 3 for player 2 (1 then 1).
+    games = pd.DataFrame({"id": [1] * 4 + [2] * 4, "c": [0, 0, 1, 1, 2, 1, 1, 0], "o": [0] * 8})
+    hits = replay_hits(games, RepeatLastMove(), 4)
+    assert list(hits.columns) == ["round", "hit"]
+    assert hits["round"].tolist() == [2, 3, 4, 2, 3, 4]
+    assert hits["hit"].tolist() == [1, 0, 1, 0, 1, 0]
+    assert replay_accuracy(games, RepeatLastMove(), 4) == 0.5
 
 
 def test_personal_tie_break_prefers_stay():
