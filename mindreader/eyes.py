@@ -1,11 +1,17 @@
-"""The bot's eyes: find one hand in an RGB image and return its 21 landmark points."""
+"""The bot's eyes: find one hand in an RGB image and return its 21 landmark points, then name the gesture."""
+import base64
 import hashlib
 import os
 import urllib.request
+from collections import Counter
+from typing import NamedTuple
 
+import cv2
 import mediapipe as mp
 import numpy as np
 from mediapipe.tasks.python import BaseOptions, vision
+
+from mindreader.hands import hand_features, mirror, to_pixels
 
 MODEL_URL = "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task"
 MODEL_SHA256 = "fbc2a30080c3c557093b5ddfc334698132eb341044ccee322ccf8bcf3607cde1"
@@ -48,3 +54,96 @@ class HandReader:
         if not result.hand_landmarks:
             return None
         return np.array([[p.x, p.y, p.z] for p in result.hand_landmarks[0]])
+
+
+JPEG_MARKER = b"\xff\xd8\xff"  # every JPEG file starts with these three bytes
+CONNECTIONS = (  # the bones: pairs of landmark points. 0 is the wrist, then four points per finger from the palm out
+    (0, 1), (1, 2), (2, 3), (3, 4),  # thumb
+    (0, 5), (5, 6), (6, 7), (7, 8),  # index finger
+    (5, 9), (9, 10), (10, 11), (11, 12),  # middle finger
+    (9, 13), (13, 14), (14, 15), (15, 16),  # ring finger
+    (13, 17), (0, 17), (17, 18), (18, 19), (19, 20),  # pinky
+)
+
+
+def decode_jpeg(data_url: str) -> np.ndarray:
+    """A JPEG as a data URL (or bare base64) -> a BGR image. Raises ValueError for anything that is not a good JPEG."""
+    if not isinstance(data_url, str):
+        raise ValueError("a JPEG must be given as a string")
+    if data_url.startswith("data:"):
+        data_url = data_url.partition(",")[2]  # keep what follows "data:image/jpeg;base64,"
+    try:
+        raw = base64.b64decode(data_url, validate=True)
+    except ValueError:  # binascii.Error is a ValueError
+        raise ValueError("not valid base64") from None
+    if not raw.startswith(JPEG_MARKER):  # so only JPEG bytes ever reach OpenCV's decoder
+        raise ValueError("not a JPEG")
+    try:
+        bgr = cv2.imdecode(np.frombuffer(raw, np.uint8), cv2.IMREAD_COLOR)
+    except cv2.error:
+        bgr = None
+    if bgr is None:
+        raise ValueError("the JPEG could not be decoded")
+    return bgr
+
+
+def encode_jpeg(bgr: np.ndarray, quality: int = 80) -> str:
+    """A BGR image -> a JPEG data URL, the form a browser <img> accepts."""
+    ok, jpeg = cv2.imencode(".jpg", bgr, [cv2.IMWRITE_JPEG_QUALITY, quality])
+    if not ok:
+        raise ValueError("the image could not be encoded as a JPEG")
+    return "data:image/jpeg;base64," + base64.b64encode(jpeg.tobytes()).decode("ascii")
+
+
+def predict_gesture(model, points: np.ndarray) -> tuple[str, float]:
+    """The model's (label, probability) for one hand, averaged with its answer for the mirrored hand (D2).
+
+    `points` are the (21, 2) pixel points from to_pixels. One predict_proba call scores both: row 0 the hand, row 1 its mirror."""
+    both = np.vstack([hand_features(points), hand_features(mirror(points))])
+    average = model.predict_proba(both).mean(axis=0)
+    best = int(np.argmax(average))  # a tie goes to the first class
+    return str(model.classes_[best]), float(average[best])  # classes_ is sorted by scikit-learn, not rock, paper, scissors
+
+
+class Vote(NamedTuple):
+    frame: int  # position in the burst
+    label: str
+    prob: float
+    landmarks: np.ndarray
+
+
+def read_throw(reader, model, frames_bgr: list, need: int = 3, min_prob: float = 0.7) -> dict:
+    """Name the gesture in a burst of BGR frames by vote (D4).
+
+    Each frame with a hand votes for a label. The most frequent label wins (a tie goes to the one seen first). The throw
+    is accepted, so `label` is not None, if at least `need` frames agree and their mean probability is `min_prob` or more.
+    Even when it is not accepted, prob, agree, best and landmarks describe the winner: `best` is the index in frames_bgr
+    of its most confident frame and `landmarks` that frame's (21, 3) points. With no hand at all they are 0.0, 0, None, None."""
+    votes = []
+    for frame, bgr in enumerate(frames_bgr):
+        landmarks = reader.landmarks(cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB))
+        if landmarks is not None:  # a frame without a hand casts no vote
+            height, width = bgr.shape[:2]
+            label, prob = predict_gesture(model, to_pixels(landmarks, width, height))
+            votes.append(Vote(frame, label, prob, landmarks))
+    if not votes:
+        return {"label": None, "prob": 0.0, "agree": 0, "best": None, "landmarks": None}
+    winner = Counter(vote.label for vote in votes).most_common(1)[0][0]
+    winning = [vote for vote in votes if vote.label == winner]
+    prob = sum(vote.prob for vote in winning) / len(winning)
+    best = max(winning, key=lambda vote: vote.prob)  # a tie goes to the earlier frame
+    accepted = len(winning) >= need and prob >= min_prob
+    return {"label": winner if accepted else None, "prob": prob, "agree": len(winning),
+            "best": best.frame, "landmarks": best.landmarks}
+
+
+def draw_skeleton(bgr: np.ndarray, landmarks: np.ndarray) -> np.ndarray:
+    """A copy of the frame with the hand's bones and joints drawn on it. Frames are never flipped (D1), nor are the points."""
+    height, width = bgr.shape[:2]
+    points = to_pixels(landmarks, width, height).round().astype(int).tolist()
+    drawn = bgr.copy()
+    for a, b in CONNECTIONS:
+        cv2.line(drawn, tuple(points[a]), tuple(points[b]), (0, 255, 0), 2)  # green bones
+    for x, y in points:
+        cv2.circle(drawn, (x, y), 4, (0, 0, 255), -1)  # red joints
+    return drawn
