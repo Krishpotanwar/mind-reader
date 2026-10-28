@@ -564,6 +564,16 @@ def test_name_limit_matches_the_bridge():
     GameEngine({"stay": Stay()}).start("x" * bridge.MAX_NAME, "stage", "stay")
 
 
+def test_start_caps_the_matches_in_a_session():
+    engine = GameEngine({"stay": Stay()})
+    first = engine.start("Asha", "stage", "stay")["match_id"]
+    for _ in range(499):  # 500 matches are allowed
+        engine.start("Asha", "stage", "stay")
+    with pytest.raises(ValueError, match="^too many matches in this session: run the game cell again$"):
+        engine.start("Asha", "stage", "stay")
+    assert engine.lock(first)["period"] == 1  # the matches already started carry on
+
+
 UNKNOWN_MATCHES = ["nope", "", None, 5, ["x"], {"a": 1}]
 
 

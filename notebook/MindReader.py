@@ -1139,3 +1139,130 @@ METRICS["facts"] = FACTS
 os.makedirs("build", exist_ok=True)
 with open("build/metrics.json", "w") as file:
     json.dump(METRICS, file, indent=2)
+
+# %% [markdown]
+# # Part 3: The Live Game
+#
+# Now the eyes and the brain play together: **CHANAKYA** plays rock-paper-scissors against you through your webcam.
+# The camera lives in the browser. Everything that reads and decides runs in Python, in this Colab session.
+#
+# **One round**
+# 1. **Lock.** Before the countdown, the brain predicts your next move from the rounds so far, and CHANAKYA fixes its own move, the one that beats the prediction. Python keeps it: the page only gets a round number, so the move cannot change after you throw.
+# 2. **Countdown.** "Rock, paper, scissors, shoot!", spoken aloud and written on the screen.
+# 3. **Capture.** At "shoot" the browser takes 5 camera frames and sends them to Python in one call. The eyes read each frame. The throw counts only if at least 3 of the 5 frames agree and the model is at least 70% sure. Otherwise the screen says "Show me your hand" and the round is tried again, not counted. After 3 tries in a row the round takes a key press instead.
+# 4. **Reveal.** Both moves, who won, and what CHANAKYA predicted, with a percentage only when the brain has one. Nothing about the prediction is shown or said before you throw.
+# 5. **Correction.** If the eyes misread you, say what you actually threw (keys 1, 2, 3 or the buttons) before the next round locks.
+#
+# **Rules.** A health bar counts wins, and ties do no damage. A match has a fixed length, 8 rounds on stage and 20 in practice. More wins takes the match, equal wins is a draw. Round 1 has no history, so CHANAKYA assumes rock (58% of first throws) and plays paper. Round 2 uses the Personal brain. From round 3 the brain you picked plays.
+#
+# **Keys.** Space starts a match, and in practice mode goes on to the next round. In stage mode the rounds follow each other, and P pauses. K switches to the keys: the camera goes off, and 1, 2 and 3 throw rock, paper and scissors. Press K again to go back: the camera only restarts after you click "I agree, start camera" once more. After a reveal, 1, 2 and 3 correct your last throw. M mutes the voice (the captions stay).
+#
+# **Privacy.** Camera frames go from your browser to this Colab session, are read in memory and are never saved. Names live in the session's memory only. A consent prompt comes before the camera starts.
+#
+# **Colab only.** The cells below need a webcam and Colab's browser bridge, so the saved copy of this notebook skips them. Run them one game cell at a time.
+
+# %%
+LIVE = os.environ.get("MR_SKIP_LIVE") != "1"  # the build sets MR_SKIP_LIVE=1: no camera there, so the live cells do nothing
+
+# %% [markdown]
+# ## 1. Quick start
+# The live game needs two things from Parts 1 and 2: the eyes model (`LIVE_EYES`) and the brains (`BRAINS`, with the best one named in `BEST_BRAIN`).
+# If you restarted the runtime, or opened this notebook on a new machine, you do not have to run Parts 1 and 2 again. Run the **Setup** cell at the top, then the cell below: it trains them again in a few seconds.
+# We train them again instead of saving them because a saved scikit-learn model breaks when Colab updates scikit-learn.
+# - **Eyes:** Logistic Regression on the 47 hand numbers, with the same split of the training pictures as Part 1 (the fit part plus its mirrored twins).
+# - **Brains:** the five models of Part 2 with their default settings (no tuning), Personal and Random. `BEST_BRAIN` is `dt`, the one Part 2 picks (dt, svm and a lookup table tie, and the first wins).
+#
+# It trains only what is missing: if Parts 1 and 2 have run, the cell finds what it needs and does nothing.
+
+# %% tags=["live"]
+def quick_start():
+    """Train again the three things the live game needs. Returns the eyes model, the brains and the best brain's name."""
+    import numpy as np
+    import pandas as pd
+    from sklearn.linear_model import LogisticRegression
+    from sklearn.model_selection import train_test_split
+    from sklearn.pipeline import Pipeline
+    from sklearn.preprocessing import StandardScaler
+
+    from mindreader.brain import FEATURES, ModelBrain, PersonalBrain, RandomBrain, add_features, brain_pipeline, load_games
+    from mindreader.hands import features_from_row
+
+    rows = add_features(load_games("data/rps_human_games.csv"))
+    small = rows[rows["id"].isin(sorted(rows["id"].unique())[:20])]  # the svm learns from the first 20 players only, as in Part 2: it stays quick
+    brains = {}
+    for name in ["dt", "logreg", "svm", "nb", "perceptron"]:
+        data = small if name == "svm" else rows
+        brains[name] = ModelBrain(brain_pipeline(name).fit(data[FEATURES], data["shift"]), name)
+    brains["personal"], brains["random"] = PersonalBrain(), RandomBrain()
+
+    hands = pd.read_csv("data/hand_landmarks.csv")
+    train = hands[hands["split"] == "train"].reset_index(drop=True)
+    fit_idx, _ = train_test_split(np.arange(len(train)), test_size=0.2, stratify=train["label"].to_numpy(), random_state=42)  # Part 1, step 7
+    fit = train.iloc[fit_idx]
+    twins = fit.copy()
+    x_columns = [f"x{point}" for point in range(21)]
+    twins[x_columns] = 1 - twins[x_columns]  # the same hands, mirrored
+    both = pd.concat([fit, twins])
+    features = np.array([features_from_row(row) for _, row in both.iterrows()])
+    eyes = Pipeline([("scale", StandardScaler()), ("model", LogisticRegression(max_iter=1000))]).fit(features, both["label"].to_numpy())
+    return eyes, brains, "dt"
+
+
+if LIVE:
+    missing = [name for name in ("LIVE_EYES", "BRAINS", "BEST_BRAIN") if name not in globals()]
+    if not missing:
+        print("Parts 1 and 2 have run: the eyes and the brains are ready.")
+    else:
+        trained_eyes, trained_brains, trained_best = quick_start()
+        if "LIVE_EYES" in missing:  # whatever Part 1 or 2 already made stays
+            LIVE_EYES = trained_eyes
+        if "BRAINS" in missing:
+            BRAINS = trained_brains
+        if "BEST_BRAIN" in missing:
+            BEST_BRAIN = trained_best
+        print(f"Quick start done: trained again {', '.join(missing)}.")
+
+# %% [markdown]
+# ## 2. The game: stage mode
+# Press **I agree, start camera**, type a name, then press **Start** (or Space). The match is 8 rounds and the rounds follow each other.
+# Hold your hand up in front of the camera and throw when the screen says SHOOT. No camera? Press **K** and play with the keys 1, 2 and 3.
+# This cell opens the hand reader once and starts a fresh game session (earlier matches and names are forgotten). Run it before the practice and eyes-test cells.
+
+# %% tags=["live"]
+if LIVE:
+    from mindreader.bridge import register, show_widget
+    from mindreader.eyes import HandReader
+    from mindreader.game import GameEngine
+
+    if "READER" not in globals():  # running this cell again keeps the one open reader
+        READER = HandReader(ensure_model("data/raw/hand_landmarker.task")).__enter__()
+    ENGINE = GameEngine(BRAINS)
+    register(ENGINE, READER, LIVE_EYES)  # from now on the page's calls reach the game in Python
+    show_widget("stage", brain=BEST_BRAIN)
+
+# %% [markdown]
+# ## 3. Practice mode
+# The same game over 20 rounds, and each round waits for you to press Space. Use it to rehearse and to try the other brains in the dropdown.
+# Needs the game cell above to have run in this session.
+
+# %% tags=["live"]
+if LIVE:
+    show_widget("practice", brain=BEST_BRAIN)
+
+# %% [markdown]
+# ## 4. The eyes test: real hands
+# The eyes learned from hands drawn by a computer (Part 1). This test tries them on real hands. The page asks for ROCK, PAPER or SCISSORS 30 times (10 of each, in a shuffled order). Python reads each burst and says whether it was **accepted** (a clear gesture) and whether it was **correct** (the gesture asked for). The page keeps the counts and shows the totals at the end.
+# The pass marks: at least 85% of throws accepted and at least 95% of the accepted throws correct, over 3 or more people, both hands and 2 kinds of light. Copy the totals the page shows.
+
+# %% tags=["live"]
+if LIVE:
+    show_widget("eyes_test")
+
+# %% [markdown]
+# ## 5. Shut down
+# When you are done, close the hand reader. A game page that is still open will then say it can't see your hand (and offer the keys) until the game cell is run again.
+
+# %% tags=["live"]
+if LIVE and "READER" in globals():
+    READER.__exit__(None, None, None)
+    del READER

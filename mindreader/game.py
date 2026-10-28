@@ -20,6 +20,7 @@ from mindreader.moves import letter, outcome, shift
 MODES = ("stage", "practice", "eyes_test")
 KEYS_AFTER = 3  # rejected throws in a row before the round takes a 1/2/3 key throw (D21)
 MAX_NAME = 20  # the same limit as bridge.MAX_NAME: the bridge cleans names, the engine only refuses a bad one
+MAX_MATCHES = 500  # matches one engine keeps: a session starts a few dozen, a page stuck in a loop would start thousands
 SMALL_SAMPLE = 30  # a report of fewer counted rounds than this carries the "small sample" flag
 LOG_COLUMNS = ["id", "game", "period", "choice", "other.choice", "result"]  # the study's columns (D23)
 MOVE_ERROR = "the move must be 0 (rock), 1 (paper) or 2 (scissors)"
@@ -162,7 +163,7 @@ class GameEngine:
                 raise ValueError("a match needs a whole number of rounds, at least 1")
         self.brains = dict(brains)  # the allow-list: a brain added to the caller's dict later cannot be started
         self._lengths = {"stage": stage_rounds, "practice": practice_rounds, "eyes_test": None}
-        self._matches = {}  # ponytail: kept for the whole session, no eviction; a session starts a few dozen matches at most
+        self._matches = {}  # ponytail: kept for the whole session, no eviction; start() refuses after MAX_MATCHES
 
     def start(self, name: str, mode: str, brain: str) -> dict:
         """Open a match and return {"match_id"}. The name only labels it; the brain must be one of the engine's."""
@@ -172,6 +173,8 @@ class GameEngine:
             raise ValueError(f"the mode must be one of {list(MODES)}")
         if not isinstance(brain, str) or brain not in self.brains:
             raise ValueError(f"the brain must be one of {list(self.brains)}")
+        if len(self._matches) >= MAX_MATCHES:
+            raise ValueError("too many matches in this session: run the game cell again")
         match_id = secrets.token_hex(8)
         self._matches[match_id] = Match(name, mode, brain, self._lengths[mode])
         return {"match_id": match_id}

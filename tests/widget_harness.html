@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Mind-Reader widget harness</title>
+</head>
+<body>
+<!--
+  A stand-in for Colab, used by tests/test_widget_smoke.py. The test replaces the marker below with the real widget page
+  (bridge.widget_page) and serves this file at http://localhost/ (a secure context, so the browser offers a camera).
+  - google.colab.kernel.invokeFunction goes to window.__py, which the test provides (Playwright's expose_function).
+  - Query: ?camera=denied refuses the camera, ?camera=slow answers after 400 ms; ?voice=none removes speech synthesis; ?voice=silent has one that never speaks;
+    ?speed=N runs the page's timers N times faster (timeouts of 4 s or more stay real). The default voice is a fake that
+    starts at once and ends each line 700 ms later, with no word events.
+  - window.__calls, __spoken and __captions record what the page asked Python, said aloud and wrote in its live caption;
+    __cameraRequests and __streams record the camera requests and the streams they gave.
+-->
+<script>
+(() => {
+  const query = new URLSearchParams(location.search);
+  window.__calls = [];
+  window.__spoken = [];
+  window.__captions = [];
+
+  window.google = {colab: {kernel: {invokeFunction: async (name, args) => {
+    window.__calls.push({name, action: args[0], payload: args[1]});
+    return {data: {'application/json': await window.__py(name, args)}};
+  }}}};
+
+  const speed = Number(query.get('speed') || 1);
+  if (speed !== 1) {
+    const realSetTimeout = window.setTimeout.bind(window);
+    window.setTimeout = (fn, ms = 0, ...rest) => realSetTimeout(fn, ms >= 4000 ? ms : ms / speed, ...rest);
+  }
+
+  window.__cameraRequests = 0;
+  window.__streams = [];
+  const realGetUserMedia = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
+  navigator.mediaDevices.getUserMedia = async (constraints) => {
+    window.__cameraRequests++;
+    if (query.get('camera') === 'denied') throw new DOMException('Permission denied', 'NotAllowedError');
+    if (query.get('camera') === 'slow') await new Promise((resolve) => setTimeout(resolve, 400));
+    const stream = await realGetUserMedia(constraints);
+    window.__streams.push(stream);
+    return stream;
+  };
+
+  if (query.get('voice') === 'none') {
+    delete window.speechSynthesis;
+  } else {
+    window.SpeechSynthesisUtterance = function (text) { this.text = text; };
+    Object.defineProperty(window, 'speechSynthesis', {configurable: true, value: {
+      cancel() {},
+      speak(utterance) {
+        if (query.get('voice') === 'silent') return;
+        window.__spoken.push(utterance.text);
+        setTimeout(() => utterance.onstart && utterance.onstart(), 10);
+        setTimeout(() => utterance.onend && utterance.onend(), 700);
+      },
+    }});
+  }
+
+  document.addEventListener('DOMContentLoaded', () => {
+    new MutationObserver(() => {
+      const text = document.getElementById('caption').textContent;
+      if (text) window.__captions.push(text);
+    }).observe(document.getElementById('caption'), {childList: true, characterData: true, subtree: true});
+  });
+})();
+</script>
+<!--WIDGET-->
+</body>
+</html>

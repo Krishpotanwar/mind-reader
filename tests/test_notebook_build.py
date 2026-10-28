@@ -7,6 +7,7 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
+import jupytext
 import pytest
 
 from tools.check_notebook_clean import problems
@@ -298,3 +299,70 @@ def test_no_cell_reuses_an_imported_name(built):
             imported |= found_imports
             assigned |= found_assigned
     assert imported & assigned == set()
+
+
+def test_part_3_live_cells_are_tagged_and_do_nothing_in_the_build(built):
+    headings = ["".join(cell["source"]).split(":")[0] for cell in built["cells"]
+                if cell["cell_type"] == "markdown" and "".join(cell["source"]).startswith("# Part ")]
+    assert headings[:4] == ["# Part 0", "# Part 1", "# Part 2", "# Part 3"]
+    cells = part(built, 3)
+    live = [cell for cell in cells if "live" in cell["metadata"].get("tags", [])]
+    assert len(live) == 5  # quick start, the game, practice, the eyes test, shut down
+    assert all(cell["cell_type"] == "code" and not cell.get("outputs") for cell in live)  # D24: no outputs; with MR_SKIP_LIVE=1 they do nothing
+    assert not [cell for cell in cells if cell["cell_type"] == "code" and cell.get("outputs")]  # and nothing else in Part 3 prints
+    source = "\n".join("".join(cell["source"]) for cell in live)
+    assert "show_widget(\"stage\"" in source and "show_widget(\"practice\"" in source and "show_widget(\"eyes_test\")" in source
+    assert "register(ENGINE, READER, LIVE_EYES)" in source and "def quick_start" in source
+    assert "image/jpeg" not in json.dumps(built)  # no camera frame ends up in the saved notebook
+
+
+# ---- Part 3's quick start and shut-down cells, read from the notebook source (no build needed) ----
+
+SOURCE = ROOT / "notebook" / "MindReader.py"
+BRAIN_NAMES = ["dt", "logreg", "svm", "nb", "perceptron", "personal", "random"]
+
+
+def run_quick_start_cell(monkeypatch, live=True, **names):
+    """Run the quick-start cell in a namespace that already holds `names` (what Parts 1 and 2 would have left); returns the namespace."""
+    monkeypatch.chdir(ROOT)
+    cell = next(cell.source for cell in jupytext.read(SOURCE).cells if cell.cell_type == "code" and "def quick_start" in cell.source)
+    namespace = {"LIVE": live, **names}
+    exec(compile(cell, "quick_start_cell", "exec"), namespace)
+    return namespace
+
+
+SVM_WARNING = "ignore:The `probability` parameter was deprecated:FutureWarning"  # the same one the Setup cell hides
+
+
+@pytest.mark.filterwarnings(SVM_WARNING)
+def test_quick_start_trains_the_eyes_when_only_they_are_missing(monkeypatch):
+    brains = object()
+    namespace = run_quick_start_cell(monkeypatch, BRAINS=brains, BEST_BRAIN="svm")
+    assert namespace["BRAINS"] is brains and namespace["BEST_BRAIN"] == "svm"  # Part 2 had run: its brains stay
+    assert hasattr(namespace["LIVE_EYES"], "predict_proba")
+
+
+@pytest.mark.filterwarnings(SVM_WARNING)
+def test_quick_start_trains_the_brains_when_only_they_are_missing(monkeypatch):
+    eyes = object()
+    namespace = run_quick_start_cell(monkeypatch, LIVE_EYES=eyes)
+    assert namespace["LIVE_EYES"] is eyes  # Part 1 had run: the eyes model it tested is not swapped
+    assert list(namespace["BRAINS"]) == BRAIN_NAMES and namespace["BEST_BRAIN"] == "dt"
+
+
+def test_quick_start_does_nothing_when_nothing_is_missing(monkeypatch, capsys):
+    names = {"LIVE_EYES": object(), "BRAINS": object(), "BEST_BRAIN": "svm"}
+    namespace = run_quick_start_cell(monkeypatch, **names)
+    assert all(namespace[name] is value for name, value in names.items())
+    assert "Parts 1 and 2 have run" in capsys.readouterr().out
+
+
+def test_quick_start_cell_does_nothing_in_the_build(monkeypatch, capsys):
+    namespace = run_quick_start_cell(monkeypatch, live=False)
+    assert "LIVE_EYES" not in namespace and "BRAINS" not in namespace and capsys.readouterr().out == ""
+
+
+def test_part_3_shut_down_text_says_what_an_open_page_does():
+    text = "\n".join(cell.source for cell in jupytext.read(SOURCE).cells if cell.cell_type == "markdown" and "## 5. Shut down" in cell.source)
+    assert text and "stops answering" not in text  # a closed hand reader raises nothing: it just finds no hand
+    assert "can't see your hand" in text
