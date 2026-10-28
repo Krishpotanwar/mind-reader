@@ -72,3 +72,44 @@ def comparison_figure(results: pd.DataFrame, title: str, baselines: dict[str, fl
     _roc(axes[1, 0], results)
     _confusion(axes[1, 1], results, labels)
     return fig
+
+
+EYES_MODELS = ["nb", "dt", "logreg", "svm_linear", "svm_rbf", "perceptron"]  # the order of Part 1's results
+BRAIN_MODELS = ["dt", "svm", "logreg", "nb", "perceptron"]  # the order of Part 2's results
+HATCHES = ["//", "..", "xx", "\\\\", "++", "oo"]  # one per bar, so the bars tell apart in greyscale
+
+
+def _scores(metrics: dict, table: str, models: list[str], yardsticks: list[str]) -> dict:
+    """metrics[table] with every model and yardstick in it, or a ValueError that says what is missing."""
+    scores = metrics.get(table) if isinstance(metrics, dict) else None
+    if not isinstance(scores, dict):
+        raise ValueError(f"metrics needs a {table!r} table")
+    missing = [key for key in models + yardsticks if key not in scores]
+    if missing:
+        raise ValueError(f"metrics[{table!r}] is missing {missing}")
+    return scores
+
+
+def _glance_panel(ax, scores: dict, models: list[str], yardsticks: list[str], title: str) -> None:
+    """One bar per model in percent, with the yardsticks as dashed lines that are named on the plot."""
+    bars = ax.bar(models, [scores[model] * 100 for model in models], color="#cfe2f3", edgecolor="black")
+    for bar, hatch in zip(bars, cycle(HATCHES)):
+        bar.set_hatch(hatch)
+    ax.bar_label(bars, fmt="{:.1f}%", padding=2, fontsize=9, bbox=LABEL_BOX)
+    for key, colour in zip(yardsticks, cycle(BASELINE_COLOURS)):
+        ax.axhline(scores[key] * 100, linestyle="--", color=colour)
+        ax.annotate(f"{key.replace('_', '-')} {scores[key]:.1%}", xy=(1, scores[key] * 100), xycoords=ax.get_yaxis_transform(),
+                    ha="right", va="bottom", fontsize=9, bbox=LABEL_BOX)  # a name on the line, not only a colour
+    ax.set(title=title, xlabel="model", ylabel="accuracy on unseen data (%)", ylim=(0, 115))
+
+
+def glance_figure(metrics: dict) -> Figure:
+    """Results at a glance (D31): the eyes' accuracies and the brain's side by side, each next to its yardsticks
+    (luck for both, always-repeat for the brain). `metrics` is the dict Part 2 saves: it needs `eyes_table` and `brain_table`."""
+    eyes = _scores(metrics, "eyes_table", EYES_MODELS, ["luck"])
+    brain = _scores(metrics, "brain_table", BRAIN_MODELS, ["luck", "always_repeat"])
+    fig, axes = plt.subplots(1, 2, figsize=(14, 5.5), sharey=True, constrained_layout=True)
+    fig.suptitle("Results at a glance: accuracy on unseen data, next to the yardsticks", fontsize=15)
+    _glance_panel(axes[0], eyes, EYES_MODELS, ["luck"], "Part 1, the eyes: the official test pictures")
+    _glance_panel(axes[1], brain, BRAIN_MODELS, ["luck", "always_repeat"], "Part 2, the brain: players it never saw")
+    return fig

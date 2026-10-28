@@ -151,6 +151,11 @@ def do_report(engine, reader, eyes_model, payload: dict) -> dict:
     return engine.report(text_field(payload, "match_id"))
 
 
+def do_leaderboard(engine, reader, eyes_model, payload: dict) -> dict:
+    """The ranking of every finished match this session (names are session memory only). It takes no arguments."""
+    return {"rows": engine.leaderboard()}
+
+
 def do_preview(engine, reader, eyes_model, payload: dict) -> dict:
     """The gesture in one frame, for the live "I see" label. One frame is enough here, with any probability."""
     frame = check_frame(payload.get("frame"), "preview frame")
@@ -169,7 +174,7 @@ def do_eyes_target(engine, reader, eyes_model, payload: dict) -> dict:
 
 
 HANDLERS = {"start": do_start, "lock": do_lock, "throw": do_throw, "correct": do_correct, "report": do_report,
-            "preview": do_preview, "eyes_target": do_eyes_target}
+            "leaderboard": do_leaderboard, "preview": do_preview, "eyes_target": do_eyes_target}
 ACTIONS = tuple(HANDLERS)
 
 

@@ -12,7 +12,9 @@ pytest.importorskip("playwright", reason="needs the playwright package")
 from playwright.sync_api import Error, expect, sync_playwright  # noqa: E402
 
 from mindreader import bridge  # noqa: E402
+from mindreader.game import GameEngine  # noqa: E402
 from test_bridge import FakeReader, Game  # noqa: E402
+from test_game import Stay  # noqa: E402
 
 HARNESS = (Path(__file__).resolve().parent / "widget_harness.html").read_text(encoding="utf-8")
 CONSENT = "This game sends camera frames to this Colab session on Google's servers only to read your hand. Nothing is saved."
@@ -243,6 +245,8 @@ def test_widget_eyes_test_keeps_the_counts(open_page):
     assert "THIS RUN: accepted 30 of 30 (100%), correct 10 of 30 (33%)" in totals
     assert "rock: accepted 10 of 10 (100%), correct 10 of 10 (100%)" in totals and "paper: accepted 10 of 10 (100%), correct 0 of 10 (0%)" in totals
     assert "ALL RUNS ON THIS PAGE: accepted 30 of 30" in totals
+    assert "report" not in actions(page) and "leaderboard" not in actions(page)  # the eyes test has no match report
+    expect(page.locator("#report")).to_be_hidden()
 
 
 def test_widget_basics_for_keyboard_and_screen_reader_users(open_page):
@@ -337,3 +341,201 @@ def test_widget_hidden_tab_sends_no_frames(open_page):
     assert previews(page) == sent  # nothing is sent to Python while the tab is hidden
     page.evaluate("window.__hidden = false")
     page.wait_for_function(f"window.__calls.filter((call) => call.action === 'preview').length > {sent}")  # and the preview comes back
+
+
+# ---- the match report, the taunts and the leaderboard (Task 9) ----
+
+MOVES = [0, 0, 1, 1, 2, 2, 0, 0]  # rock, rock, paper, paper, scissors, scissors, rock, rock against the Stay brain
+NO_BOARD = "The leaderboard could not be read."
+
+
+def short_game(rounds):
+    """A game whose stage matches have `rounds` rounds, so a test that only needs the end of a match is quick."""
+    game = Game()
+    game.engine = GameEngine({"stay": Stay()}, stage_rounds=rounds)
+    return game
+
+
+def keys_match(open_page, *, muted=True, wrap=None, game=None, name="Asha"):
+    """Open a stage game with no camera, switch to the keys, and start a match (the page's timers run 20 times faster)."""
+    page, game = open_page("stage", "?speed=20&camera=denied", game=game, wrap=wrap)
+    page.click("#agree")
+    expect(page.locator("#alert")).to_have_text(BLOCKED)
+    if muted:
+        page.keyboard.press("m")
+    page.keyboard.press("k")
+    expect(page.locator("#game")).to_be_visible()
+    page.fill("#name", name)
+    page.click("#start")
+    return page, game
+
+
+def throw_keys(page, moves):
+    """Throw each move with the 1, 2 and 3 keys: wait until the round is locked and the page asks for a key, then press."""
+    for number, move in enumerate(moves, start=1):
+        expect(page.locator("#round")).to_contain_text(f"ROUND {number} OF", timeout=SLOW_MS)
+        page.wait_for_function("document.getElementById('caption').textContent.startsWith('Press 1')")
+        page.keyboard.press(str(move + 1))
+
+
+def rows_of(page, table):
+    """The text of every cell of a table's body: a list of rows, each a list of strings."""
+    return page.evaluate("(sel) => [...document.querySelectorAll(sel + ' tbody tr')].map((tr) => [...tr.children].map((cell) => cell.textContent))", table)
+
+
+def test_report_panel_shows_k_of_n_and_small_sample_note(open_page):
+    def with_two_lab_brains(action, payload, reply):  # the page names the brains it knows by their lab labels and shows any other name as it is
+        if action != "report":
+            return reply
+        rows = reply["replay"]["rows"] + [{"brain": "dt", "k": 3, "n": 7}, {"brain": "random", "k": 2, "n": 7}]
+        return {**reply, "replay": {**reply["replay"], "rows": rows}}
+
+    page, game = keys_match(open_page, wrap=with_two_lab_brains)
+    throw_keys(page, MOVES)  # against Stay: lose, lose, tie, lose, tie, lose, tie, lose
+    report = page.locator("#report")
+    expect(report).to_be_visible(timeout=SLOW_MS)
+    expect(page.locator("#final")).to_have_text("CHANAKYA WINS THE MATCH: 0 wins to 5, 3 ties")  # the final line stays, the report sits under it
+    assert page.evaluate("document.getElementById('final').nextElementSibling.id") == "report"
+    expect(report).to_have_attribute("aria-labelledby", "report-title")  # a labelled region with a heading
+    expect(page.locator("#report-title")).to_have_text("Match report")
+    expect(page.locator("#report-score")).to_have_text("Final score: you 0, CHANAKYA 5, ties 3. CHANAKYA wins the match.")  # in words, not colour
+    expect(page.locator("#report-moments")).to_have_text("Mind-read moments: 2 of 5")  # round 1 and round 2 came true; rounds 3, 5 and 7 were called and missed
+    expect(page.locator("#report")).to_contain_text("round 1 it expects you to open with rock")  # what counts as a moment (D14)
+    assert rows_of(page, "#report-habits") == [
+        ["Same move again after a loss", "1 of 4"], ["Same move again after a tie", "3 of 3"], ["Same move again after a win", "0 of 0"],
+        ["Favourite move", "rock, 4 of 8 throws"], ["Steps: stay (same move again)", "4 of 7"],
+        ["Steps: up (the move that beats your last)", "3 of 7"], ["Steps: down (the move your last one beats)", "0 of 7"]]
+    expect(page.locator("#report-unpredictable")).to_have_text("The bot predicted 4 of 7 of your throws in rounds 2 to 8. Unpredictability = 1 - 4/7 = 43%.")  # k is the bot's hits, never "misses"
+    assert "miss" not in page.locator("#report").inner_text().lower().replace("missed", "")  # (the moments note says a call can be missed: that is about calls, not hits)
+    expect(page.locator("#report-small")).to_have_text("Small sample: 8 rounds is too few to be sure, so read these numbers as a hint, not as proof.")
+    assert page.locator("#report-replay caption").inner_text() == "Brain replay (illustrative)"
+    assert rows_of(page, "#report-replay") == [["stay", "4 of 7"], ["Decision Tree (Lab 4)", "3 of 7"], ["Random (pure luck)", "2 of 7"]]  # the brains' guesses for this match, k of n
+    assert page.locator("#report").inner_text().lower().count("not a ranking") == 1
+    assert page.locator("#report-board caption").inner_text() == "Most unpredictable today"
+    assert rows_of(page, "#report-board") == [["1", "Asha", "stage", "43%", "4 of 7"]]  # rank, name, mode, unpredictability, k of n
+    assert page.evaluate("""() => [...document.querySelectorAll('#report table')].every((table) => table.caption && table.caption.textContent.trim()
+      && [...table.querySelectorAll('th')].every((th) => ['col', 'row'].includes(th.scope)))""")  # real tables: a caption and a scope on every header
+    assert actions(page)[-2:] == ["report", "leaderboard"]  # asked once the final reveal was on screen
+    payloads = {call["action"]: call["payload"] for call in page.evaluate("window.__calls")}
+    assert set(payloads["report"]) == {"match_id"} and payloads["leaderboard"] == {}
+    page.keyboard.press("3")  # "I actually threw scissors" in round 8: the last round of a finished match can still be corrected
+    expect(page.locator("#report-score")).to_have_text("Final score: you 1, CHANAKYA 4, ties 3. CHANAKYA wins the match.")  # the report is asked for again
+    expect(page.locator("#report-unpredictable")).to_have_text("The bot predicted 3 of 7 of your throws in rounds 2 to 8. Unpredictability = 1 - 3/7 = 57%.")
+    assert rows_of(page, "#report-board") == [["1", "Asha", "stage", "57%", "3 of 7"]]  # replaced, not added to
+    assert rows_of(page, "#report-habits")[3:] == [["Favourite move", "rock, 3 of 8 throws"], ["Steps: stay (same move again)", "3 of 7"],
+                                                   ["Steps: up (the move that beats your last)", "3 of 7"], ["Steps: down (the move your last one beats)", "1 of 7"]]
+    assert actions(page)[-5:] == ["report", "leaderboard", "correct", "report", "leaderboard"]
+    assert page.dialogs == []
+
+
+def test_taunts_are_short_friendly_and_chosen_by_the_round(open_page):
+    page, _ = keys_match(open_page, muted=False)  # the voice is on, so every spoken line is recorded
+    taunts = page.evaluate("window.MR_TAUNTS")  # the constants, read from the page
+    assert set(taunts) == {"TAUNTS", "CALLED_IT"} and set(taunts["TAUNTS"]) == {"win", "lose", "tie"}
+    assert set(taunts["CALLED_IT"]) == {"opener", "repeat_after_loss"}
+    everything = [line for lines in taunts["TAUNTS"].values() for line in lines] + list(taunts["CALLED_IT"].values())
+    assert all(len(line.split()) <= 6 for line in everything)  # six words or fewer, so the voice never drags
+    assert all(len(lines) >= 3 and len(set(lines)) == len(lines) for lines in taunts["TAUNTS"].values())  # a few lines for each result, none twice
+    assert not [line for line in everything if any(rude in line.lower() for rude in ("stupid", "idiot", "loser", "dumb", "suck", "hate", "pathetic"))]  # friendly
+    throw_keys(page, MOVES)
+    expect(page.locator("#report")).to_be_visible(timeout=SLOW_MS)
+    spoken = page.evaluate("window.__spoken")
+    assert spoken[0::2] == [COUNTDOWN] * 8 and len(spoken) == 16  # a countdown and then one taunt, every round
+    results = ["lose", "lose", "tie", "lose", "tie", "lose", "tie", "lose"]  # what the stub game does to MOVES
+    expected = [taunts["CALLED_IT"]["opener"], taunts["CALLED_IT"]["repeat_after_loss"]]  # rounds 1 and 2: the bot's call came true, so "Called it" replaces the fixed line
+    expected += [taunts["TAUNTS"][result][(number - 1) % len(taunts["TAUNTS"][result])] for number, result in enumerate(results, start=1) if number > 2]
+    assert spoken[1::2] == expected  # the same match always gets the same lines: chosen by the round number
+    captions = page.evaluate("window.__captions")
+    assert all(any(line in caption for caption in captions) for line in spoken[1::2])  # and every spoken line is also a caption
+
+
+def test_report_is_text_only_shows_ten_leaderboard_rows_and_is_replaced_not_added_to(open_page):
+    calls = {"report": 0, "leaderboard": 0}
+
+    def hostile(action, payload, reply):
+        if action == "report":
+            calls["report"] += 1
+            rows = [{**row, "brain": EVIL} for row in reply["replay"]["rows"]]
+            return {**reply, "name": EVIL, "small_sample": calls["report"] > 1, "replay": {**reply["replay"], "rows": rows}}
+        if action == "leaderboard":
+            calls["leaderboard"] += 1
+            rows = [{"name": EVIL if number == 0 else f"Player {number}", "mode": "stage", "score": 0.5, "k": 1, "n": 2} for number in range(12)]
+            return {**reply, "rows": rows if calls["leaderboard"] == 1 else []}
+        return reply
+
+    page, _ = keys_match(open_page, wrap=hostile, game=short_game(2))
+    throw_keys(page, [0, 1])
+    expect(page.locator("#report")).to_be_visible(timeout=SLOW_MS)
+    expect(page.locator("#report-small")).to_have_text("")  # no small-sample note when Python does not flag one
+    board = rows_of(page, "#report-board")
+    assert len(board) == 10 and board[0] == ["1", EVIL, "stage", "50%", "1 of 2"] and board[9][0] == "10"  # at most ten rows, the names as text
+    assert rows_of(page, "#report-replay") == [[EVIL, "0 of 1"]]  # a brain name from Python is text too (round 2 predicted a repeat of rock: paper came)
+    assert page.locator("#report img").count() == 0 and page.locator("#mr img[src='x']").count() == 0
+    page.keyboard.press("2")  # a correction: the report is asked for again, and now Python flags a small sample and has no leaderboard rows
+    expect(page.locator("#report-small")).to_contain_text("Small sample")
+    expect(page.locator("#report-board-note")).to_have_text("No finished matches yet.")  # an empty list says so
+    expect(page.locator("#report-board")).to_be_hidden()
+    assert rows_of(page, "#report-board") == []  # none of the ten old rows is left behind
+    page.wait_for_timeout(300)  # long enough for an onerror to have fired
+    assert page.dialogs == []
+
+
+@pytest.mark.parametrize("failing", ["report", "leaderboard"])
+def test_report_failure_says_python_is_not_answering(open_page, failing):
+    def silent(action, payload, reply):
+        if action == failing:
+            raise RuntimeError("the kernel is gone")  # invokeFunction rejects in the page
+        return reply
+
+    page, _ = keys_match(open_page, wrap=silent, game=short_game(2))
+    throw_keys(page, [0, 1])
+    expect(page.locator("#alert")).to_have_text(NO_REPLY, timeout=SLOW_MS)  # D21 copy
+    expect(page.locator("#final")).to_be_visible()  # the final line stays
+    expect(page.locator("#again")).to_have_text("Play again")
+    if failing == "report":
+        expect(page.locator("#report")).to_be_hidden()
+        assert "leaderboard" not in actions(page)
+    else:
+        expect(page.locator("#report")).to_be_visible()  # the report itself is shown; only the board is missing
+        expect(page.locator("#report-board-note")).to_have_text(NO_BOARD)
+        expect(page.locator("#report-board")).to_be_hidden()
+
+
+def test_play_again_clears_the_report_and_is_reached_with_the_keyboard(open_page):
+    page, _ = keys_match(open_page, game=short_game(2))
+    throw_keys(page, [0, 1])
+    expect(page.locator("#report")).to_be_visible(timeout=SLOW_MS)
+    expect(page.locator("#report-board tbody tr")).to_have_count(1)
+    for _ in range(12):  # Tab only: the report holds nothing to get stuck on
+        page.keyboard.press("Tab")
+        if page.evaluate("document.activeElement.id") == "again":
+            break
+    else:
+        pytest.fail("Tab never reached Play again")
+    page.keyboard.press("Enter")
+    expect(page.locator("#report")).to_be_hidden()
+    expect(page.locator("#final")).to_be_hidden()
+    assert page.evaluate("[...document.querySelectorAll('#report p[id], #report tbody')].every((el) => el.textContent === '')")  # nothing of the last player is left in the page
+    assert page.locator("#name").input_value() == "" and page.locator("#you-name").inner_text() == "YOU"
+
+
+def test_a_report_that_arrives_after_play_again_is_dropped(open_page):
+    page, _ = open_page("stage", "?speed=20&camera=denied", game=short_game(2))
+    page.evaluate("""() => {
+      const real = google.colab.kernel.invokeFunction;
+      google.colab.kernel.invokeFunction = async (name, args, options) => {
+        const reply = await real(name, args, options);
+        if (args[0] === 'report') { await new Promise((resolve) => setTimeout(resolve, 4000)); window.__lateReport = true; }  // 4 s: a delay of 4 s or more is not sped up
+        return reply;
+      };
+    }""")
+    page.click("#agree")
+    page.keyboard.press("m")
+    page.keyboard.press("k")
+    page.click("#start")
+    throw_keys(page, [0, 1])
+    expect(page.locator("#again")).to_be_visible(timeout=SLOW_MS)
+    page.click("#again")  # the report is still on its way
+    page.wait_for_function("window.__lateReport === true", timeout=10_000)
+    expect(page.locator("#report")).to_be_hidden()  # it arrived, and was not drawn for the player who has gone
+    assert "leaderboard" not in actions(page)

@@ -242,6 +242,13 @@ class GameEngine:
                 rows.append({"name": match.name, "mode": match.mode, **u})
         return sorted(rows, key=lambda row: (-row["score"], -row["n"]))  # sorted is stable: earlier matches stay first
 
+    def finished_matches(self, mode: str) -> list:
+        """The ids of the finished matches of this mode, in the order they were started (an id is only an anonymous label,
+        so the order they finished in does not matter). An eyes test never finishes, so its list is always empty."""
+        if mode not in MODES:  # `in` compares, so a list or None from the browser is a plain "no", not a TypeError
+            raise ValueError(f"the mode must be one of {list(MODES)}")
+        return [match_id for match_id, match in self._matches.items() if match.mode == mode and match.done]
+
     def export_log(self, match_id: str, player_id: str) -> pd.DataFrame:
         """The counted rounds in the study's columns, for the pilot (D23). The id must be anonymous, like P01."""
         match = self._match(match_id)

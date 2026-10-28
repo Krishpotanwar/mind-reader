@@ -48,6 +48,15 @@
 .help, .debug { margin: 10px 0 0; font-size: 13px; color: #9aa3b2; }
 .caption { min-height: 26px; margin: 12px 0 0; padding: 6px 10px; border-radius: 8px; font-size: 17px; background: rgba(0, 0, 0, .35); }
 .caption:empty { min-height: 0; margin: 0; padding: 0; background: none; }
+.report { margin-top: 12px; }
+.report .lead { font: 800 18px system-ui; }
+.report .note { margin: 4px 0 12px; font-size: 13px; color: #c8cee0; }
+.report-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; margin-top: 8px; }
+.report table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.report caption { padding: 4px 0; text-align: left; font-weight: 800; color: #ffd60a; }
+.report th, .report td { padding: 5px 8px 5px 0; border-top: 1px solid #2f3a55; text-align: left; vertical-align: top; }
+.report thead th { border-top: 0; font-size: 12px; color: #9fb4d0; }
+.report tbody th { font-weight: 600; }
 .mr[data-mode="eyes_test"] .arena { grid-template-columns: minmax(0, 420px); justify-content: center; }
 .eyes { margin-top: 12px; text-align: center; }
 .eyes .move { font-size: 26px; }
@@ -106,6 +115,37 @@
 
   <div id="result" class="banner game-only"></div>
   <div id="final" class="final game-only" hidden></div>
+  <section id="report" class="panel report game-only" aria-labelledby="report-title" hidden>
+    <h2 id="report-title">Match report</h2>
+    <p id="report-score" class="lead"></p>
+    <p id="report-moments"></p>
+    <p class="note">A mind-read moment is a call CHANAKYA made that came true: in round 1 it expects you to open with rock, and after a loss it expects you to repeat your move.</p>
+    <p id="report-unpredictable"></p>
+    <p id="report-small" class="note"></p>
+    <div class="report-grid">
+      <table id="report-habits">
+        <caption>Your habits (k of n)</caption>
+        <thead><tr><th scope="col">Habit</th><th scope="col">k of n</th></tr></thead>
+        <tbody></tbody>
+      </table>
+      <div>
+        <table id="report-replay">
+          <caption>Brain replay (illustrative)</caption>
+          <thead><tr><th scope="col">Brain</th><th scope="col">Guessed your throw</th></tr></thead>
+          <tbody></tbody>
+        </table>
+        <p class="note">Illustrative: how each brain would have guessed your throws in this match, one round at a time. It is not a ranking.</p>
+      </div>
+      <div>
+        <table id="report-board">
+          <caption>Most unpredictable today</caption>
+          <thead><tr><th scope="col">Rank</th><th scope="col">Name</th><th scope="col">Mode</th><th scope="col">Unpredictability</th><th scope="col">Bot right (k of n)</th></tr></thead>
+          <tbody></tbody>
+        </table>
+        <p id="report-board-note" class="note"></p>
+      </div>
+    </div>
+  </section>
   <p id="rate" class="sub game-only"></p>
 
   <div id="setup" class="setup game-only">

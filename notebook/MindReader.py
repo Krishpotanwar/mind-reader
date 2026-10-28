@@ -80,6 +80,22 @@ display(Markdown(
     f"People are not random, so a model can learn their habits. That is the brain's job."))
 
 # %% [markdown]
+# ## Results at a glance
+# Both parts in one picture, before the details: how well the eyes name a gesture (Part 1) and how well the brain predicts the next move (Part 2), each next to its yardsticks.
+# The dashed lines are **luck** and, for the brain, **always-repeat** (throw your last move again): a model only counts if it beats them.
+# Part 2 has not run yet, so this cell draws the numbers saved by the last full run of this notebook (`notebook/metrics_snapshot.json`). Part 4 draws the same picture again from this run's own numbers.
+
+# %%
+from mindreader.plots import glance_figure
+
+if os.path.exists("notebook/metrics_snapshot.json"):
+    with open("notebook/metrics_snapshot.json") as snapshot_file:
+        fig = glance_figure(json.load(snapshot_file))
+    plt.show()
+else:
+    print("No saved results yet: run the whole notebook once, then this picture appears here.")
+
+# %% [markdown]
 # # Part 1: The Eyes
 #
 # The eyes look at a picture of a hand and name the gesture: **rock, paper or scissors.**
@@ -1259,10 +1275,158 @@ if LIVE:
     show_widget("eyes_test")
 
 # %% [markdown]
-# ## 5. Shut down
+# ## 5. The pilot: save the throws of the practice matches (optional)
+# The Assignment asks how often real people repeat their move right after losing. So friends play a 20-round **practice** match against CHANAKYA (step 3), and their throws can be saved here. Pilot players must not have heard the pitch before they play, so they play like anyone would.
+# - **What is saved:** the throws of every finished practice match in this session, moves only: no pictures, no names. Each match gets an anonymous id (P01, P02, ... in the order the matches were started). A row is one round: the id, the round number, the player's move, CHANAKYA's move and who won.
+# - **Where:** `data/pilot/pilot_<date>.csv`. A second file on the same day ends in `_2`, and so on, and no file is ever overwritten. Run the cell **once, after the last player**: running it again saves the earlier matches again in a new file.
+# - **Nothing is saved unless you tick the box** in the form below. It is unticked until you tick it, and then the cell only says that nothing was saved.
+# - **Tell each pilot player before they play** that their throws will be saved this way. The camera check on the game screen only speaks about camera frames, and those are never saved.
+# - Then send the file to Krish: open the folder panel on the left in Colab, find `data/pilot/` and download the file.
+# Needs the game cell (step 2) to have run in this session.
+
+# %% tags=["live"]
+SAVE_MY_THROWS = False  #@param {type:"boolean"}
+if LIVE:
+    from mindreader.pilot import export_pilot
+
+    try:
+        saved_file = export_pilot(ENGINE, consent=SAVE_MY_THROWS)
+        print(f"Saved {saved_file}: send this file to Krish.")
+    except ValueError as problem:  # the box is not ticked, or no practice match has finished yet
+        print("Not saved:", problem)
+
+# %% [markdown]
+# ## 6. Shut down
 # When you are done, close the hand reader. A game page that is still open will then say it can't see your hand (and offer the keys) until the game cell is run again.
 
 # %% tags=["live"]
 if LIVE and "READER" in globals():
     READER.__exit__(None, None, None)
     del READER
+
+# %% [markdown]
+# # Part 4: What we found
+#
+# This part gathers the numbers of Parts 1 and 2 in one place, says what we can and cannot claim, and credits the data and the tools.
+# Everything in the first sections is computed in this run (the `METRICS` dictionary the earlier parts filled), so Parts 1 and 2 must have run in this session.
+
+# %% [markdown]
+# ## 1. The numbers in one table
+# Each result sits next to its yardsticks: **luck** (a random guess, one chance in three), and for the brain **always-rock** and **always-repeat**, computed on the same rows. A dash means the yardstick does not apply.
+# `n` is how many pictures or rounds the result is out of.
+
+# %%
+from mindreader.plots import BRAIN_MODELS, EYES_MODELS
+
+
+def percent(share):
+    return "-" if pd.isna(share) else f"{share:.1%}"
+
+
+eyes_scores, brain_scores = METRICS["eyes_table"], METRICS["brain_table"]
+early, live_svm, study = METRICS["brain_early"], METRICS["brain_table_live_svm"], METRICS["facts"]
+luck = brain_scores["luck"]
+summary_rows = [  # what was measured, the result, luck, always-rock, always-repeat, n
+    ("Study data: repeat the same move after a loss", study["repeat_after_loss"], luck, None, None, study["n_after_loss"]),
+    ("Eyes: best of the six models, official test pictures", max(eyes_scores[name] for name in EYES_MODELS), eyes_scores["luck"], None, None, IMAGES["test"]),
+    ("Eyes: live model, test pictures as they are", METRICS["eyes_test_acc"], eyes_scores["luck"], None, None, IMAGES["test"]),
+    ("Eyes: live model, test pictures mirrored", METRICS["eyes_test_acc_mirrored"], eyes_scores["luck"], None, None, IMAGES["test"]),
+    ("Brain: best of the five models, unseen players", max(brain_scores[name] for name in BRAIN_MODELS), luck, brain_scores["always_rock"], brain_scores["always_repeat"], study["n_model_rows"]),
+    ("Brain: live SVM (20 players), the other 52 players", live_svm["accuracy"], luck, None, live_svm["always_repeat"], live_svm["n"]),
+    ("Personal brain, rounds 2 to 10", early["2-10"]["personal"], luck, early["2-10"]["always_rock"], early["2-10"]["always_repeat"], early["2-10"]["n"]),
+    ("Personal brain, rounds 2 to 20", early["2-20"]["personal"], luck, early["2-20"]["always_rock"], early["2-20"]["always_repeat"], early["2-20"]["n"]),
+]
+columns = ["measured", "result", "luck", "always-rock", "always-repeat", "n"]
+summary_table = pd.DataFrame(summary_rows, columns=columns)
+for column in columns[1:-1]:
+    summary_table[column] = summary_table[column].map(percent)
+summary_table["n"] = summary_table["n"].map("{:,}".format)
+print(summary_table.to_string(index=False, formatters={"measured": "{:<54}".format}, header=[columns[0].ljust(54), *columns[1:]]))
+
+# %% [markdown]
+# ## 2. Results at a glance, from this run
+# The same picture as in Part 0, drawn from the numbers of this run.
+
+# %%
+from mindreader.plots import glance_figure
+
+fig = glance_figure(METRICS)
+plt.show()
+
+# %% [markdown]
+# ## 3. The pilot: do our friends do it too?
+# The Assignment: friends play practice matches (Part 3, step 5 saves their throws), and we count the rounds that came right after a loss (n) and how many of them repeated the previous move (k). The cell reads every `data/pilot/pilot_*.csv`.
+# The interval is the 95% Wilson interval. We decided the line in advance (D30): **"my friends do it too"** if the whole interval is above luck (1/3), **"less predictable than the study's players"** only if the whole interval is below the study's 52.7% and there are at least 60 rounds after a loss, and otherwise **inconclusive**. The first 8 rounds are reported on their own, because a stage match is 8 rounds.
+
+# %%
+from mindreader.pilot import STUDY_REPEAT, load_pilot, repeated_players, summarize, verdict
+
+PILOT_ROWS = load_pilot()
+PILOT = summarize(PILOT_ROWS) if len(PILOT_ROWS) else None
+if PILOT is None:
+    print("No pilot files yet: the pilot is gate G3 (classmates play practice matches in Part 3 and send their files), so nothing is reported here.")
+else:
+    files = PILOT_ROWS["file"].nunique()
+    print(f"Pilot: {PILOT['players']} players, {PILOT['rounds']} rounds, {files} file{'s' if files != 1 else ''}. The opponent was always the bot.")
+    for file, player in repeated_players(PILOT_ROWS):
+        print(f"Warning: {player} in {file} has exactly the same throws as a player in an earlier file. If that match was exported twice, "
+              f"delete the older file before reading these numbers: it is counted twice.")
+    for window, title in [("all", "All rounds"), ("early", "Rounds 1 to 8 only")]:
+        repeat, wins = PILOT[window]["repeat_after_loss"], PILOT[window]["win_rate"]
+        print(title)
+        for name, count in [("repeat right after a loss", repeat), ("win rate against the bot", wins)]:
+            if count["n"] == 0:
+                print(f"  {name}: no rounds to count")
+                continue
+            print(f"  {name}: {count['k']} of {count['n']} ({count['k'] / count['n']:.0%}), 95% interval {count['low']:.0%} to {count['high']:.0%}")
+        print(f"    verdict on repeating after a loss: {verdict(repeat['k'], repeat['n'])}")
+    print(f"For comparison: the study's players repeated after a loss {STUDY_REPEAT:.1%} of the time, and luck is 33.3%.")
+    print("One player's rounds are not independent of each other, so the true uncertainty is a little wider than the intervals show.")
+
+# %% [markdown]
+# ## 4. What we learned
+
+# %%
+best_eyes = max(eyes_scores[name] for name in EYES_MODELS)
+best_brain = max(brain_scores[name] for name in BRAIN_MODELS)
+gain = (best_brain - brain_scores["always_repeat"]) * 100
+pilot_line = ("The pilot has no numbers yet, so this notebook makes no claim about our friends."
+              if PILOT is None else
+              f"Our pilot ({PILOT['players']} players, {PILOT['rounds']} rounds): on repeating after a loss the verdict is "
+              f"**{verdict(PILOT['all']['repeat_after_loss']['k'], PILOT['all']['repeat_after_loss']['n'])}**.")
+display(Markdown(
+    f"- **The study's players have habits.** After losing a round they threw the same move again {study['repeat_after_loss']:.1%} of the time "
+    f"(n = {study['n_after_loss']:,} rounds), against {luck:.1%} for a random player. This is computed from the study's public data.\n"
+    f"- **The eyes read computer-drawn hands very well.** The best of the six models names {best_eyes:.1%} of the {IMAGES['test']} official test pictures "
+    f"(luck: {eyes_scores['luck']:.1%}). Those hands are drawn by a computer, so the live eyes test in Part 3 is what tells us about real hands.\n"
+    f"- **The brain finds a small pattern in players it never saw.** The best brain predicts {best_brain:.1%} of the next moves. Always-repeat gets "
+    f"{brain_scores['always_repeat']:.1%} and luck {luck:.1%}, so the gain over the best simple rule is {gain:.1f} points. "
+    f"That is evidence of predictability on unseen players, computed from the study's public data. It is not a promise about any one person.\n"
+    f"- **A single match says little.** In rounds 2 to 20 the Personal brain gets {early['2-20']['personal']:.1%} "
+    f"(always-repeat {early['2-20']['always_repeat']:.1%}, always-rock {early['2-20']['always_rock']:.1%}), and in rounds 2 to 10 {early['2-10']['personal']:.1%}. "
+    f"The match report shows k of n so everyone can see how small the sample is.\n"
+    f"- {pilot_line}"))
+
+# %% [markdown]
+# ## 5. Limitations
+# - **Humans against humans.** The study measured humans against humans: its 72 players played each other, not a bot. People may play a bot differently, so the brain's numbers say how predictable those players were, not how well CHANAKYA does against you.
+# - **72 players and one lab design.** Every player took part under one lab design (the same rules and setting, 300 rounds each). Another crowd or another setting may behave differently.
+# - **Hands drawn by a computer.** The eyes learned from pictures of hands drawn by a computer and were tested on the same kind. The live eyes are unverified until the live eyes test (Part 3, step 4) has been run with real hands, both hands and two kinds of light.
+# - **A small pilot.** A handful of classmates give wide intervals, and one player's rounds are not independent of each other. The pilot can show that friends repeat after a loss, but it cannot separate small differences.
+# - **Short matches.** A stage match is 8 rounds, which is a small sample for any habit. One match is luck; the report shows k of n for that reason.
+
+# %% [markdown]
+# ## 6. Future work
+# - Record real webcam hands and train the eyes on them as well (the plan's Part 1b), if the live eyes test falls short of its pass marks.
+# - A larger pilot with more players and longer matches, so the intervals get narrower.
+# - A brain that mixes the study's habits with the player's own habits as the match goes on, instead of choosing one.
+# - Longer histories (the last three rounds) and other features, tested on players the model has not seen.
+# - Check whether people playing a bot repeat after a loss as often as people playing people did in the study.
+
+# %% [markdown]
+# ## 7. Credits
+# - **The games:** Wang, Xu & Zhou (2014), *Social cycling and conditional responses in the Rock-Paper-Scissors game*, Scientific Reports 4, 5830, <https://doi.org/10.1038/srep05830>. We used the copy in the R package stratEst 1.1.8 (GPL-3), converted to a CSV that keeps the GPL-3 licence.
+# - **The hand pictures:** the "Rock Paper Scissors Dataset" by Laurence Moroney (hands drawn by a computer), CC BY 2.0.
+# - **The hand points:** Google's MediaPipe Hand Landmarker model, a pretrained model that finds 21 points on a hand. We only use it to turn a picture into numbers; our own models are trained with scikit-learn.
+# - **Libraries:** scikit-learn (the models), OpenCV (reading the camera pictures and drawing the hand points), MediaPipe, numpy, pandas, matplotlib and seaborn.
+# - The exact licences of the data are in `data/LICENSES.md`. The code of this project is MIT (see `LICENSE`).

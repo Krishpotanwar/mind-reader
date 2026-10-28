@@ -1,11 +1,15 @@
+import json
+from pathlib import Path
+
 import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import pytest
 
-from mindreader.plots import comparison_figure
+from mindreader.plots import BRAIN_MODELS, EYES_MODELS, comparison_figure, glance_figure
 
 BASELINES = {"luck": 1 / 3, "always-rock": 0.356, "always-repeat": 0.44}
 CURVE = (np.array([0.0, 0.4, 1.0]), np.array([0.0, 0.7, 1.0]), 0.7)
@@ -77,3 +81,68 @@ def test_comparison_figure_draws_every_baseline_even_past_three():
         assert len([line for line in fig.axes[0].lines if line.get_linestyle() == "--"]) == 4
     finally:
         plt.close(fig)
+
+
+# ---- the Results at a glance figure (D31) ----
+
+GLANCE = {
+    "eyes_table": {"nb": 0.90, "dt": 0.94, "logreg": 0.99, "svm_linear": 0.985, "svm_rbf": 0.98, "perceptron": 0.97, "luck": 1 / 3},
+    "brain_table": {"dt": 0.455, "svm": 0.45, "logreg": 0.447, "nb": 0.448, "perceptron": 0.379, "luck": 1 / 3, "always_rock": 0.356, "always_repeat": 0.44},
+    "facts": {"a": 1},  # anything else in the metrics is ignored
+}
+
+
+def dashed(ax):
+    return {round(float(line.get_ydata()[0]), 6): line for line in ax.lines if line.get_linestyle() == "--"}
+
+
+def test_glance_figure_puts_both_parts_side_by_side_next_to_their_yardsticks():
+    fig = glance_figure(GLANCE)
+    try:
+        fig.canvas.draw()  # draws everything, so a warning raised while drawing fails this test too
+        eyes, brain = fig.axes
+        assert len(fig.axes) == 2 and eyes.get_position().x1 < brain.get_position().x0  # eyes on the left, brain on the right
+        assert [text.get_text() for text in eyes.get_xticklabels()] == ["nb", "dt", "logreg", "svm_linear", "svm_rbf", "perceptron"]
+        assert [text.get_text() for text in brain.get_xticklabels()] == ["dt", "svm", "logreg", "nb", "perceptron"]
+        assert [round(patch.get_height(), 3) for patch in eyes.patches] == [90.0, 94.0, 99.0, 98.5, 98.0, 97.0]  # percentages, not fractions
+        assert [round(patch.get_height(), 3) for patch in brain.patches] == [45.5, 45.0, 44.7, 44.8, 37.9]
+        assert [text.get_text() for text in eyes.texts if text.get_text().endswith("%")][:6] == ["90.0%", "94.0%", "99.0%", "98.5%", "98.0%", "97.0%"]
+        assert [text.get_text() for text in brain.texts if text.get_text().endswith("%")][:5] == ["45.5%", "45.0%", "44.7%", "44.8%", "37.9%"]  # a value on every bar
+        assert list(dashed(eyes)) == [pytest.approx(100 / 3, abs=1e-5)]  # luck only
+        assert sorted(dashed(brain)) == [pytest.approx(100 / 3, abs=1e-5), 44.0]  # luck and always-repeat, not always-rock
+        assert {text.get_text() for ax in fig.axes for text in ax.texts} >= {"luck 33.3%", "always-repeat 44.0%"}  # the lines are named on the plot, not by colour
+        assert len({patch.get_hatch() for patch in eyes.patches}) == 6 and len({patch.get_hatch() for patch in brain.patches}) == 5  # greyscale: a hatch each
+        assert eyes.get_ylim() == brain.get_ylim() and eyes.get_ylim()[0] == 0 and eyes.get_ylim()[1] > 100 * 0.99  # one scale for both, with room for the labels
+        assert fig.get_suptitle() and "unseen" in fig.get_suptitle().lower()
+        for ax in fig.axes:
+            assert ax.get_title() and ax.get_xlabel() and ax.get_ylabel()
+    finally:
+        plt.close(fig)
+
+
+def test_glance_figure_draws_the_real_snapshot():
+    snapshot = json.loads((Path(__file__).resolve().parent.parent / "notebook" / "metrics_snapshot.json").read_text(encoding="utf-8"))
+    fig = glance_figure(snapshot)
+    try:
+        fig.canvas.draw()
+        eyes, brain = fig.axes
+        assert [round(patch.get_height(), 4) for patch in eyes.patches] == [round(snapshot["eyes_table"][name] * 100, 4) for name in EYES_MODELS]
+        assert [round(patch.get_height(), 4) for patch in brain.patches] == [round(snapshot["brain_table"][name] * 100, 4) for name in BRAIN_MODELS]
+    finally:
+        plt.close(fig)
+
+
+@pytest.mark.parametrize("table, key", [("eyes_table", "svm_rbf"), ("eyes_table", "luck"), ("brain_table", "nb"), ("brain_table", "luck"), ("brain_table", "always_repeat")])
+def test_glance_figure_names_the_missing_key(table, key):
+    metrics = {name: dict(values) for name, values in GLANCE.items()}
+    del metrics[table][key]
+    open_before = plt.get_fignums()
+    with pytest.raises(ValueError, match=rf"{table}.*{key}"):
+        glance_figure(metrics)
+    assert plt.get_fignums() == open_before  # and no half-drawn figure is left open
+
+
+@pytest.mark.parametrize("metrics", [{}, {"eyes_table": {}}, {"brain_table": GLANCE["brain_table"]}, {"eyes_table": GLANCE["eyes_table"], "brain_table": None}, None, []])
+def test_glance_figure_refuses_metrics_without_the_two_tables(metrics):
+    with pytest.raises(ValueError):
+        glance_figure(metrics)

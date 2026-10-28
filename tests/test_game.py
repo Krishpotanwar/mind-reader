@@ -452,6 +452,46 @@ def test_leaderboard_is_empty_before_any_match_finishes():
     assert engine.leaderboard() == []
 
 
+# ---- finished matches (the pilot export uses them) ----
+
+def test_finished_matches_lists_only_finished_matches_of_that_mode_in_start_order():
+    engine = GameEngine({"stay": Stay()}, stage_rounds=2, practice_rounds=3)
+
+    def begin(mode):
+        return engine.start("Asha", mode, "stay")["match_id"]
+
+    first, second, third, fourth = begin("practice"), begin("practice"), begin("practice"), begin("practice")
+    stage, eyes = begin("stage"), begin("eyes_test")
+    play(engine, third, [0, 1, 2])  # finished first...
+    play(engine, first, [0, 0, 0])  # ...then this one: the list follows the order they were STARTED
+    play(engine, second, [0, 1])  # one round short
+    play(engine, fourth, [])  # never thrown
+    play(engine, stage, [0, 1])  # finished, but a stage match
+    play(engine, eyes, [0, 1, 2] * 3)  # an eyes test never finishes
+    assert engine.finished_matches("practice") == [first, third]
+    assert engine.finished_matches("stage") == [stage]
+    assert engine.finished_matches("eyes_test") == []
+    play(engine, second, [2])  # the last round arrives: it joins the list in start order, between the other two
+    assert engine.finished_matches("practice") == [first, second, third]
+
+
+def test_finished_matches_is_empty_before_anything_finishes_and_hands_out_a_copy():
+    engine = GameEngine({"stay": Stay()}, practice_rounds=2)
+    assert engine.finished_matches("practice") == []
+    match = engine.start("Asha", "practice", "stay")["match_id"]
+    play(engine, match, [0, 1])
+    listed = engine.finished_matches("practice")
+    listed.clear()  # changing what the caller was given does not touch the engine
+    assert engine.finished_matches("practice") == [match]
+    json.dumps(engine.finished_matches("practice"))  # plain text ids
+
+
+@pytest.mark.parametrize("mode", ["arcade", "Practice", "", None, 5, ["practice"], {"practice": 1}])
+def test_finished_matches_refuses_a_mode_that_does_not_exist(mode):
+    with pytest.raises(ValueError, match="mode"):
+        GameEngine({"stay": Stay()}).finished_matches(mode)
+
+
 # ---- export ----
 
 def test_export_log_columns_and_anonymous_id():

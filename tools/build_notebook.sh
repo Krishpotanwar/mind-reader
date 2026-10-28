@@ -12,3 +12,4 @@ cd "$(dirname "$0")/.."
     --ExecutePreprocessor.timeout=600 --ExecutePreprocessor.kernel_name=python3 notebook/MindReader.ipynb
 "$PYTHON" tools/check_notebook_clean.py notebook/MindReader.ipynb
 "$PYTHON" -m jupyter nbconvert --to html notebook/MindReader.ipynb
+cp build/metrics.json notebook/metrics_snapshot.json  # Part 0 draws the last build's numbers (Part 2 only writes them later); commit this file

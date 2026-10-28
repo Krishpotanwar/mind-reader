@@ -349,6 +349,35 @@ def test_handle_plays_a_whole_stage_match_and_reports_it():
     assert set(report) >= {"habits", "replay", "score", "health"} and report["replay"]["label"] == "illustrative"
 
 
+def test_handle_leaderboard_lists_the_finished_matches_most_unpredictable_first():
+    game = Game()
+    assert game.call("leaderboard", {}) == {"ok": True, "rows": []}  # nothing has finished yet: an empty list, not an error
+    for name, moves in [("Asha", [0] * 8), ("Bo", [0, 1, 2, 0, 1, 2, 0, 1])]:  # Stay reads every repeat; Bo never repeats
+        match = game.start(name=name)
+        for move in moves:
+            game.round(match, move=move)
+    game.round(game.start(name="Cy"), move=0)  # one round of eight: not on the board yet
+    reply = as_page_would_see_it(game.call("leaderboard", {}))
+    assert reply == {"ok": True, "rows": [
+        {"name": "Bo", "mode": "stage", "score": 1.0, "k": 0, "n": 7},
+        {"name": "Asha", "mode": "stage", "score": 0.0, "k": 7, "n": 7}]}
+    assert as_page_would_see_it(game.call("leaderboard", {"match_id": 5, "mode": None, "junk": [1]})) == reply  # extra fields are ignored
+    assert game.engine.leaderboard() == reply["rows"]  # the page gets exactly what the engine ranks, nothing added
+
+
+def test_handle_leaderboard_never_raises(monkeypatch):
+    monkeypatch.setattr(bridge, "last_error", "")
+    game = Game()
+
+    def boom():
+        raise KeyError(SECRET)
+
+    monkeypatch.setattr(game.engine, "leaderboard", boom)
+    broken = game.call("leaderboard", {})
+    assert broken == {"ok": False, "error": bridge.TRY_AGAIN} and SECRET not in json.dumps(broken)
+    assert "KeyError" in bridge.last_error
+
+
 def test_handle_preview_accepts_one_unsure_frame():
     seen = Game(label="paper", prob=0.5).call("preview", {"frame": FRAME})  # one frame, and only 50% sure: the throw rules would refuse it
     assert seen == {"ok": True, "label": "paper", "prob": pytest.approx(0.5)}

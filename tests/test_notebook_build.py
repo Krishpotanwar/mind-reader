@@ -4,17 +4,22 @@ import os
 import re
 import subprocess
 import sys
+import time
 from datetime import datetime
 from pathlib import Path
+from types import SimpleNamespace
 
 import jupytext
+import pandas as pd
 import pytest
 
+from mindreader.game import GameEngine
 from tools.check_notebook_clean import problems
 
 ROOT = Path(__file__).resolve().parent.parent
 NOTEBOOK = ROOT / "notebook" / "MindReader.ipynb"
 METRICS = ROOT / "build" / "metrics.json"
+SNAPSHOT = ROOT / "notebook" / "metrics_snapshot.json"
 
 
 def two_cell_notebook():
@@ -307,7 +312,7 @@ def test_part_3_live_cells_are_tagged_and_do_nothing_in_the_build(built):
     assert headings[:4] == ["# Part 0", "# Part 1", "# Part 2", "# Part 3"]
     cells = part(built, 3)
     live = [cell for cell in cells if "live" in cell["metadata"].get("tags", [])]
-    assert len(live) == 5  # quick start, the game, practice, the eyes test, shut down
+    assert len(live) == 6  # quick start, the game, practice, the eyes test, the pilot export, shut down
     assert all(cell["cell_type"] == "code" and not cell.get("outputs") for cell in live)  # D24: no outputs; with MR_SKIP_LIVE=1 they do nothing
     assert not [cell for cell in cells if cell["cell_type"] == "code" and cell.get("outputs")]  # and nothing else in Part 3 prints
     source = "\n".join("".join(cell["source"]) for cell in live)
@@ -363,6 +368,265 @@ def test_quick_start_cell_does_nothing_in_the_build(monkeypatch, capsys):
 
 
 def test_part_3_shut_down_text_says_what_an_open_page_does():
-    text = "\n".join(cell.source for cell in jupytext.read(SOURCE).cells if cell.cell_type == "markdown" and "## 5. Shut down" in cell.source)
+    text = "\n".join(cell.source for cell in jupytext.read(SOURCE).cells if cell.cell_type == "markdown" and "## 6. Shut down" in cell.source)
     assert text and "stops answering" not in text  # a closed hand reader raises nothing: it just finds no hand
     assert "can't see your hand" in text
+
+
+# ---- Task 9: Part 0's picture, the pilot cells, Part 4 and the time budgets ----
+
+def code_source(marker):
+    """The source of the first code cell of the notebook that contains `marker`."""
+    return next(cell.source for cell in jupytext.read(SOURCE).cells if cell.cell_type == "code" and marker in cell.source)
+
+
+def run_cell(monkeypatch, folder, source, **names):
+    """Run a cell's source in a namespace that already holds `names`, from inside `folder`. Returns the namespace."""
+    monkeypatch.chdir(folder)
+    namespace = dict(names)
+    exec(compile(source, "cell", "exec"), namespace)
+    return namespace
+
+
+def finished_practice_engine(moves=(0, 1, 2), rounds=3):
+    from test_game import Stay, play
+
+    engine = GameEngine({"stay": Stay()}, practice_rounds=rounds)
+    play(engine, engine.start("Asha Verma", "practice", "stay")["match_id"], list(moves))
+    return engine
+
+
+def test_the_build_leaves_a_snapshot_of_the_fresh_metrics_for_part_0(built):
+    assert SNAPSHOT.read_bytes() == METRICS.read_bytes()  # tools/build_notebook.sh copies it after every successful build
+    assert json.loads(SNAPSHOT.read_text(encoding="utf-8")) == json.loads(METRICS.read_text(encoding="utf-8"))
+
+
+def test_part_0_shows_results_at_a_glance_in_under_two_seconds(built):
+    part_0 = part(built, 0)
+    cell = next(cell for cell in part_0 if "glance_figure" in "".join(cell["source"]))
+    assert "notebook/metrics_snapshot.json" in "".join(cell["source"])  # Part 2 has not run yet when Part 0 does: it draws the last build's numbers
+    assert len(pictures([cell])) == 1 and "No saved results" not in shown_text([cell])
+    assert seconds([cell]) < 2  # D26: the figure costs almost nothing
+    assert len(pictures(part_0)) == 1  # and it is the only picture in Part 0
+
+
+def test_the_glance_cell_prints_one_note_when_there_is_no_snapshot(monkeypatch, tmp_path, capsys):
+    shown = []
+    run_cell(monkeypatch, tmp_path, code_source("glance_figure"), os=os, json=json, plt=SimpleNamespace(show=lambda: shown.append(1)))
+    assert capsys.readouterr().out.strip().splitlines() == ["No saved results yet: run the whole notebook once, then this picture appears here."]
+    assert shown == []  # and no empty figure
+
+
+def test_the_glance_cell_draws_the_snapshot_it_finds(monkeypatch, tmp_path, capsys):
+    (tmp_path / "notebook").mkdir()
+    (tmp_path / "notebook" / "metrics_snapshot.json").write_text(SNAPSHOT.read_text(encoding="utf-8"), encoding="utf-8")
+    shown = []
+    run_cell(monkeypatch, tmp_path, code_source("glance_figure"), os=os, json=json, plt=SimpleNamespace(show=lambda: shown.append(1)))
+    assert shown == [1] and capsys.readouterr().out == ""
+
+
+# --- the pilot: consent first ---
+
+def test_part_3_pilot_text_asks_for_consent_in_plain_words():
+    cells = jupytext.read(SOURCE).cells
+    text = next(cell.source for cell in cells if cell.cell_type == "markdown" and "## 5. " in cell.source and "ilot" in cell.source)
+    flat = " ".join(text.replace("# ", " ").split())
+    for promise in ["moves only", "no pictures, no names", "every finished practice match", "data/pilot/", "anonymous id (P01, P02", "unless you tick the box",
+                    "must not have heard the pitch"]:  # what is saved and where, the tick, and D29
+        assert promise in flat, promise
+    camera_text = "This game sends camera frames to this Colab session on Google's servers only to read your hand. Nothing is saved."
+    assert camera_text not in text  # D22's camera consent stays in the widget, word for word
+
+
+def test_part_3_pilot_cell_is_a_live_form_that_is_unticked_and_passes_the_tick_on():
+    cell = next(cell for cell in jupytext.read(SOURCE).cells if cell.cell_type == "code" and "export_pilot" in cell.source)
+    assert cell.metadata.get("tags") == ["live"]
+    lines = cell.source.splitlines()
+    assert lines[0] == 'SAVE_MY_THROWS = False  #@param {type:"boolean"}'  # a Colab form box, unticked, at the top level
+    assert "consent=SAVE_MY_THROWS" in cell.source and "if LIVE:" in lines[1:]  # the export sits behind the live switch and gets the tick
+    export_line = next(line for line in lines if "export_pilot(" in line and "import" not in line)
+    assert export_line.startswith("        ")  # inside `if LIVE:` and the try block: nothing is exported at the top level
+
+
+def test_pilot_cell_requires_consent_in_the_notebook(monkeypatch, tmp_path, capsys):
+    engine = finished_practice_engine()
+    source = code_source("export_pilot")
+    run_cell(monkeypatch, tmp_path, source, LIVE=True, ENGINE=engine)  # the box as it is shipped: unticked
+    assert not (tmp_path / "data").exists()  # no file, not even the folder
+    assert "Not saved" in capsys.readouterr().out
+    run_cell(monkeypatch, tmp_path, source.replace("SAVE_MY_THROWS = False", "SAVE_MY_THROWS = True", 1), LIVE=False, ENGINE=engine)
+    assert not (tmp_path / "data").exists() and capsys.readouterr().out == ""  # the build (MR_SKIP_LIVE=1) never saves, ticked or not
+    run_cell(monkeypatch, tmp_path, source.replace("SAVE_MY_THROWS = False", "SAVE_MY_THROWS = True", 1), LIVE=True, ENGINE=engine)
+    (saved,) = (tmp_path / "data" / "pilot").glob("pilot_*.csv")  # ticked: one file
+    out = capsys.readouterr().out
+    assert f"data/pilot/{saved.name}" in out and "send this file to Krish" in out
+    text = saved.read_text(encoding="utf-8")
+    assert text.splitlines()[0] == "id,game,period,choice,other.choice,result" and "P01" in text and "Asha" not in text and "Verma" not in text
+
+
+def test_pilot_cell_with_a_ticked_box_but_no_finished_practice_match_says_so(monkeypatch, tmp_path, capsys):
+    engine = finished_practice_engine(moves=(0, 1))  # one round short of finished
+    run_cell(monkeypatch, tmp_path, code_source("export_pilot").replace("SAVE_MY_THROWS = False", "SAVE_MY_THROWS = True", 1), LIVE=True, ENGINE=engine)
+    assert not (tmp_path / "data").exists()
+    assert "no finished practice match" in capsys.readouterr().out
+
+
+# --- Part 4 ---
+
+def write_pilot_file(folder, name, players):
+    """players: {id: [(choice, result), ...]} -> folder/name, in the pilot's columns."""
+    rows = [(player, 1, number, choice, "p", result) for player, throws in players.items() for number, (choice, result) in enumerate(throws, start=1)]
+    folder.mkdir(parents=True, exist_ok=True)
+    pd.DataFrame(rows, columns=["id", "game", "period", "choice", "other.choice", "result"]).to_csv(folder / name, index=False)
+
+
+def test_the_pilot_cell_prints_one_note_when_there_are_no_files(monkeypatch, tmp_path, capsys):
+    namespace = run_cell(monkeypatch, tmp_path, code_source("load_pilot"))
+    lines = capsys.readouterr().out.strip().splitlines()
+    assert len(lines) == 1 and "G3" in lines[0] and "classmates" in lines[0]  # the pilot is gate G3: nothing is invented
+    assert "%" not in lines[0] and not re.search(r"\d", lines[0].replace("G3", "").replace("Part 3", ""))  # no number, no percentage: there is nothing to report
+    assert namespace["PILOT"] is None
+
+
+def test_the_pilot_cell_prints_the_counts_the_intervals_and_the_verdict(monkeypatch, tmp_path, capsys):
+    folder = tmp_path / "data" / "pilot"
+    write_pilot_file(folder, "pilot_2026-10-31.csv", {  # P01 repeats after both losses; P02 repeats after one of two
+        "P01": [("r", "lose"), ("r", "tie"), ("p", "lose"), ("p", "win")], "P02": [("s", "lose"), ("p", "lose"), ("p", "tie"), ("p", "tie")]})
+    namespace = run_cell(monkeypatch, tmp_path, code_source("load_pilot"))
+    out = capsys.readouterr().out
+    assert "2 players, 8 rounds" in out and "1 file" in out
+    assert "repeat right after a loss: 3 of 4 (75%)" in out and "95% interval 30% to 95%" in out  # Wilson (3, 4) = (30.1%, 95.4%)
+    assert "win rate against the bot: 1 of 8 (12%)" in out
+    assert "rounds 1 to 8 only" in out.lower()
+    assert out.count("inconclusive") == 2  # four rounds after a loss are far too few to say anything, pooled or early
+    assert namespace["PILOT"]["players"] == 2 and namespace["PILOT"]["all"]["repeat_after_loss"]["k"] == 3
+
+
+def test_the_pilot_cell_warns_when_a_match_was_exported_twice(monkeypatch, tmp_path, capsys):
+    folder = tmp_path / "data" / "pilot"
+    same = {"P01": [("r", "lose"), ("r", "tie"), ("p", "lose")]}
+    write_pilot_file(folder, "pilot_2026-10-31.csv", same)
+    write_pilot_file(folder, "pilot_2026-10-31_2.csv", same)
+    run_cell(monkeypatch, tmp_path, code_source("load_pilot"))
+    out = capsys.readouterr().out
+    assert "pilot_2026-10-31_2.csv" in out and "P01" in out and "exported twice" in out
+
+
+def test_part_4_table_and_text_read_the_numbers_of_this_run(built):
+    metrics = json.loads(METRICS.read_text(encoding="utf-8"))
+    cells = part(built, 4)
+    assert cells, "the notebook has no Part 4"
+    text = shown_text(cells)
+    brain, eyes, early, live, facts = metrics["brain_table"], metrics["eyes_table"], metrics["brain_early"], metrics["brain_table_live_svm"], metrics["facts"]
+
+    def row(label):
+        """[result, luck, always-rock, always-repeat, n] of the table row that starts with this label."""
+        line = next(line for line in text.splitlines() if line.startswith(label))
+        return line[len(label):].split()
+
+    def pct(share):
+        return f"{share:.1%}"
+
+    assert row("Study data: repeat the same move after a loss") == [pct(facts["repeat_after_loss"]), pct(1 / 3), "-", "-", f"{facts['n_after_loss']:,}"]
+    best_eyes = max(eyes[name] for name in ["nb", "dt", "logreg", "svm_linear", "svm_rbf", "perceptron"])
+    assert row("Eyes: best of the six models, official test pictures") == [pct(best_eyes), pct(eyes["luck"]), "-", "-", "372"]
+    assert row("Eyes: live model, test pictures as they are")[0] == pct(metrics["eyes_test_acc"])
+    assert row("Eyes: live model, test pictures mirrored")[0] == pct(metrics["eyes_test_acc_mirrored"])
+    best_brain = max(brain[name] for name in ["dt", "svm", "logreg", "nb", "perceptron"])
+    assert row("Brain: best of the five models, unseen players") == [pct(best_brain), pct(brain["luck"]), pct(brain["always_rock"]), pct(brain["always_repeat"]), f"{facts['n_model_rows']:,}"]
+    assert row("Brain: live SVM (20 players), the other 52 players") == [pct(live["accuracy"]), pct(brain["luck"]), "-", pct(live["always_repeat"]), f"{live['n']:,}"]
+    for window, label in [("2-10", "Personal brain, rounds 2 to 10"), ("2-20", "Personal brain, rounds 2 to 20")]:
+        assert row(label) == [pct(early[window]["personal"]), pct(brain["luck"]), pct(early[window]["always_rock"]), pct(early[window]["always_repeat"]), f"{early[window]['n']:,}"]
+    assert len(pictures(cells)) == 1  # the glance figure, drawn from this run's numbers
+    glance_cell = next(cell for cell in cells if "glance_figure" in "".join(cell["source"]))
+    assert "glance_figure(METRICS)" in "".join(glance_cell["source"]) and pictures([glance_cell])
+
+
+def test_part4_reads_metrics(built):
+    """What the notebook says in Part 4 matches `METRICS` in value (the table above checks every row; this checks the sentences)."""
+    metrics = json.loads(METRICS.read_text(encoding="utf-8"))
+    cells = part(built, 4)
+    text = shown_text(cells)
+    brain, facts = metrics["brain_table"], metrics["facts"]
+    best_brain = max(brain[name] for name in ["dt", "svm", "logreg", "nb", "perceptron"])
+    gain = (best_brain - brain["always_repeat"]) * 100
+    assert f"predicts {best_brain:.1%} of the next moves" in text
+    assert f"{gain:.1f} points" in text and f"Always-repeat gets {brain['always_repeat']:.1%}" in text
+    assert f"{facts['repeat_after_loss']:.1%} of the time (n = {facts['n_after_loss']:,}" in text
+    early = metrics["brain_early"]["2-20"]
+    assert f"rounds 2 to 20 the Personal brain gets {early['personal']:.1%}" in text
+    assert "computed from the study's public data" in text and "evidence of predictability on unseen players" in text  # D29, word for word
+
+
+def test_part_4_pilot_section_in_the_build_matches_the_files_there_are(built):
+    cells = part(built, 4)
+    pilot_cell = next(cell for cell in cells if "load_pilot" in "".join(cell["source"]))
+    text = shown_text([pilot_cell])
+    files = sorted((ROOT / "data" / "pilot").glob("pilot_*.csv"))
+    if files:
+        assert f"{len(files)} file" in text and "95% interval" in text
+        assert any(verdict in text for verdict in ("inconclusive", "my friends do it too", "less predictable than the study's players"))
+    else:
+        assert len(text.strip().splitlines()) == 1 and "G3" in text  # no files, one note line, nothing invented
+        assert "%" not in text and not re.search(r"\d", text.replace("G3", "").replace("Part 3", ""))
+
+
+def test_part_4_limits_future_work_and_credits_are_there():
+    markdown = "\n".join(cell.source for cell in jupytext.read(SOURCE).cells if cell.cell_type == "markdown")
+    part_4 = markdown.split("# Part 4:", 1)[1]
+    limits = part_4.split("Limitations", 1)[1].split("Future work", 1)[0]
+    for point in ["humans against humans", "72 players", "one lab design", "drawn by a computer", "small pilot", "until the live eyes test"]:
+        assert point in limits, point
+    credits = part_4.split("Credits", 1)[1]
+    for name in ["Wang, Xu & Zhou", "Scientific Reports 4, 5830", "stratEst", "Laurence Moroney", "CC BY 2.0", "MediaPipe Hand Landmarker", "scikit-learn", "OpenCV", "data/LICENSES.md"]:
+        assert name in credits, name
+    assert "Future work" in part_4
+
+
+# --- time ---
+
+@pytest.mark.filterwarnings(SVM_WARNING)
+def test_quick_start_under_20s(monkeypatch):
+    namespace = run_quick_start_cell(monkeypatch, live=False)  # defines quick_start without calling it
+    started = time.perf_counter()
+    eyes, brains, best = namespace["quick_start"]()
+    elapsed = time.perf_counter() - started
+    print(f"quick_start took {elapsed:.1f} s")
+    assert elapsed <= 20, f"quick_start took {elapsed:.1f} s; the budget (D26) is 20 s"
+    assert hasattr(eyes, "predict_proba") and list(brains) == BRAIN_NAMES and best == "dt"  # it really trained both
+
+
+def test_the_rest_of_parts_0_3_and_4_fit_in_30_seconds(built):
+    total = sum(seconds(part(built, number)) for number in (0, 3, 4))
+    assert total <= 30, f"Parts 0, 3 and 4 took {total:.1f} s"  # D26: the rest of the fresh Run all
+
+
+# ---- the build script copies the metrics only after a build that worked ----
+
+def run_build_script(tmp_path, fail_execute):
+    """Run tools/build_notebook.sh in a scratch project whose `python` does nothing, or fails the moment it is asked to execute the notebook."""
+    (tmp_path / "tools").mkdir()
+    (tmp_path / "tools" / "build_notebook.sh").write_text((ROOT / "tools" / "build_notebook.sh").read_text(encoding="utf-8"), encoding="utf-8")
+    (tmp_path / "build").mkdir()
+    (tmp_path / "build" / "metrics.json").write_text('{"fresh": true}', encoding="utf-8")
+    (tmp_path / "notebook").mkdir()
+    (tmp_path / "notebook" / "metrics_snapshot.json").write_text('{"stale": true}', encoding="utf-8")
+    fake = tmp_path / "fake_python"
+    fake.write_text('#!/bin/sh\ncase "$*" in *--execute*) [ -n "$FAIL_EXECUTE" ] && exit 1;; esac\nexit 0\n', encoding="utf-8")
+    fake.chmod(0o755)
+    env = {**os.environ, "PYTHON": str(fake)}
+    env.pop("FAIL_EXECUTE", None)
+    if fail_execute:
+        env["FAIL_EXECUTE"] = "1"
+    run = subprocess.run(["bash", str(tmp_path / "tools" / "build_notebook.sh")], env=env, capture_output=True, text=True)
+    return run.returncode, (tmp_path / "notebook" / "metrics_snapshot.json").read_text(encoding="utf-8")
+
+
+def test_the_build_script_copies_the_fresh_metrics_after_a_successful_build(tmp_path):
+    code, snapshot = run_build_script(tmp_path, fail_execute=False)
+    assert code == 0 and snapshot == '{"fresh": true}'
+
+
+def test_the_build_script_leaves_the_snapshot_alone_when_the_build_fails(tmp_path):
+    code, snapshot = run_build_script(tmp_path, fail_execute=True)
+    assert code != 0 and snapshot == '{"stale": true}'  # a failed build must not publish its numbers

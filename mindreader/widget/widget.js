@@ -29,12 +29,18 @@ const TEXT = {
   countdown: 'Rock, paper, scissors, shoot!',
   pressKey: 'Press 1 (rock), 2 (paper) or 3 (scissors)',
   pageError: 'Something went wrong in this page: press Start over',
+  noBoard: 'The leaderboard could not be read.',
+  reportReady: 'The match report is below the score.',
 };
 const MOVES = [{word: 'ROCK', icon: '✊'}, {word: 'PAPER', icon: '✋'}, {word: 'SCISSORS', icon: '✌️'}];
 const GESTURES = ['rock', 'paper', 'scissors'];
 const BRAIN_LABELS = {dt: 'Decision Tree (Lab 4)', logreg: 'Logistic Regression (Lab 6)', svm: 'SVM (Lab 8)', nb: 'Naive Bayes (Lab 7)',
   perceptron: 'Perceptron (Lab 6)', personal: 'Personal (counts your own habits)', random: 'Random (pure luck)'};
-const SPOKEN = {win: 'Nice one. You got me.', lose: 'I read you. I win.', tie: 'A tie. Again.'};  // 6 words or fewer
+const TAUNTS = {  // friendly, 6 words or fewer; one is picked by the round number, so a match always gets the same lines
+  win: ['Nice one. You got me.', 'Well played. Point to you.', 'Good read. I will remember that.', 'You beat me. Enjoy it!'],
+  lose: ['I read you. I win.', 'Your habits gave you away.', 'I saw that coming.', 'Point to me. Good try!'],
+  tie: ['A tie. Again.', 'Great minds think alike.', 'Same move. Go again!', 'We matched. One more round?'],
+};
 const CALLED_IT = {opener: 'Called it: you opened with rock', repeat_after_loss: 'Called it: you repeated after losing'};
 const FACTS = {opener: '58% of people open with rock', repeat_after_loss: '53% of people repeat after a loss'};  // from the study's data (D7)
 
@@ -327,11 +333,16 @@ async function playRound() {  // 'next', 'over' or 'stuck'
   else { await sleep(HOLD_MS); while (paused) await sleep(100); }
   return 'next';
 }
+function taunt(r) {  // the line after a round: "Called it" if the bot's call came true (D14), else a fixed line picked by the round number
+  if (r.moment) return CALLED_IT[r.moment];
+  const lines = TAUNTS[r.result];
+  return lines[(r.period - 1) % lines.length];
+}
 function afterThrow(r) {  // show the reveal and speak one short line
   lastRound = {id: round.id};
   reveal(r);
   $('you-sure').textContent = r.seen && r.seen.label ? '(' + pct(r.seen.prob) + ' sure)' : '';
-  const line = r.moment ? CALLED_IT[r.moment] : SPOKEN[r.result];
+  const line = taunt(r);
   $('bubble').textContent = line;
   $('bubble').hidden = false;
   // the live caption holds the spoken line, and the rest of the reveal for screen readers: the result, the prediction, the fact behind a "Called it"
@@ -347,6 +358,75 @@ function waitSpace() {
   previewOn = !!stream && !keyboardMode;
   say('Press Space for the next round', false);
   return new Promise((resolve) => { spaceWaiter = () => { $('next').hidden = true; resolve(); }; });
+}
+
+// ---- the match report (D14 to D16): everything from Python goes in as text ----
+const BOARD_ROWS = 10;
+const kOfN = (k, n) => k + ' of ' + n;
+const brainLabel = (name) => (Object.prototype.hasOwnProperty.call(BRAIN_LABELS, name) ? BRAIN_LABELS[name] : name);
+let reportRun = 0;  // each report asked for gets a number: an answer that arrives after a newer one, or after Play again, is dropped
+
+function fillTable(table, rows) {  // rows are lists of text; the first cell of each row is its header
+  table.tBodies[0].replaceChildren(...rows.map((texts) => {
+    const tr = document.createElement('tr');
+    texts.forEach((text, i) => {
+      const cell = document.createElement(i === 0 ? 'th' : 'td');
+      if (i === 0) cell.scope = 'row';
+      cell.textContent = text;
+      tr.append(cell);
+    });
+    return tr;
+  }));
+}
+function renderBoard(rows) {  // rows: the leaderboard from Python (best first), or null if it could not be read
+  const shown = (rows || []).slice(0, BOARD_ROWS);
+  fillTable($('report-board'), shown.map((row, i) => [String(i + 1), row.name, row.mode, pct(row.score), kOfN(row.k, row.n)]));
+  $('report-board').hidden = !shown.length;
+  $('report-board-note').textContent = rows === null ? TEXT.noBoard : shown.length ? '' : 'No finished matches yet.';
+}
+function renderReport(r, board) {
+  const who = {player: 'You win the match', bot: 'CHANAKYA wins the match', draw: 'The match is a draw'}[r.winner] || 'The match is not over';
+  $('report-score').textContent = 'Final score: you ' + r.score.player + ', CHANAKYA ' + r.score.bot + ', ties ' + r.score.ties + '. ' + who + '.';
+  $('report-moments').textContent = 'Mind-read moments: ' + kOfN(r.moments.k, r.moments.n);
+  const h = r.habits, again = h.repeat_after, move = h.favourite.move;
+  fillTable($('report-habits'), [
+    ['Same move again after a loss', kOfN(again.lose.k, again.lose.n)],
+    ['Same move again after a tie', kOfN(again.tie.k, again.tie.n)],
+    ['Same move again after a win', kOfN(again.win.k, again.win.n)],
+    ['Favourite move', move === null ? 'none yet' : MOVES[move].word.toLowerCase() + ', ' + kOfN(h.favourite.k, h.favourite.n) + ' throws'],
+    ['Steps: stay (same move again)', kOfN(h.cycle.stay, h.cycle.n)],
+    ['Steps: up (the move that beats your last)', kOfN(h.cycle.up, h.cycle.n)],
+    ['Steps: down (the move your last one beats)', kOfN(h.cycle.down, h.cycle.n)],
+  ]);
+  const u = r.unpredictability;  // u.k is how many throws the bot got RIGHT: unpredictability is 1 - k/n
+  $('report-unpredictable').textContent = u.score === null ? 'The bot has not predicted any of your throws yet.'
+    : 'The bot predicted ' + kOfN(u.k, u.n) + ' of your throws in rounds 2 to ' + r.rounds + '. Unpredictability = 1 - ' + u.k + '/' + u.n + ' = ' + pct(u.score) + '.';
+  $('report-small').textContent = r.small_sample ? 'Small sample: ' + r.rounds + ' rounds is too few to be sure, so read these numbers as a hint, not as proof.' : '';
+  fillTable($('report-replay'), r.replay.rows.map((row) => [brainLabel(row.brain), kOfN(row.k, row.n)]));
+  renderBoard(board);
+  $('report').hidden = false;
+}
+async function showReport() {  // under the final line: the report, then the leaderboard. A failure keeps the final line and says so (D21)
+  const mine = ++reportRun;
+  try {
+    const report = await ask('report', {match_id: match.id}, true);
+    if (mine !== reportRun) return;
+    if (!report) { complain(TEXT.noReply); return; }
+    const board = await ask('leaderboard', {}, true);
+    if (mine !== reportRun) return;
+    if (!board) complain(TEXT.noReply);
+    renderReport(report, board ? board.rows : null);
+    say(TEXT.reportReady, false);  // the caption is the live region, so a screen reader hears that the report is there
+  } catch (error) {  // an answer that is not what the page expects
+    console.error(error);
+    complain(TEXT.noReply);
+  }
+}
+function clearReport() {  // nothing of the last match or the leaderboard stays on the page
+  reportRun++;
+  $('report').hidden = true;
+  document.querySelectorAll('#report p[id], #report tbody').forEach((el) => el.replaceChildren());
+  $('report-board').hidden = false;
 }
 
 // ---- a match ----
@@ -382,6 +462,7 @@ function finishMatch() {
   busy = false;
   $('again').textContent = 'Play again';
   $('again').hidden = false;
+  showReport();
 }
 function stuck() {  // Python is not answering (the reason is already on the screen)
   stopCamera();
@@ -394,6 +475,7 @@ function playAgain() {
   match = round = lastRound = lastReveal = null;
   canCorrect = correcting = forceKeys = false; moveWaiter = spaceWaiter = null; busy = false; period = ties = 0;
   clearAlert();
+  clearReport();
   ['you-move', 'bot-move', 'predicted', 'result', 'you-sure', 'seen', 'you-wins', 'bot-wins', 'debug', 'rate', 'eyes-progress'].forEach((id) => $(id).replaceChildren());
   $('you-name').textContent = 'YOU';
   $('name').value = '';  // the next player does not start as this one
@@ -470,6 +552,7 @@ function onMoveKey(move) {  // 1, 2, 3: a throw if one is awaited, else a correc
       reveal(reply);
       $('you-sure').textContent = '';
       say(['Corrected: you threw ' + MOVES[move].word.toLowerCase(), resultLine(reply), reply.done ? finalLine(reply) : ''].filter(Boolean).join('. '), false);
+      if (reply.done) showReport();  // the last round of a finished match can change the winner: ask for the report again
     }
     syncFix();
   });
@@ -577,5 +660,6 @@ function init() {
   setInterval(previewTick, PREVIEW_MS);
   window.addEventListener('pagehide', stopCamera);
 }
+window.MR_TAUNTS = {TAUNTS, CALLED_IT};  // read by the browser tests: every line must be 6 words or fewer
 init();
 })();
