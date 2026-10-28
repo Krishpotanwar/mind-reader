@@ -202,6 +202,72 @@ def test_part_2_shows_five_models_next_to_three_baselines(built):
     assert float(agreement.group(4)) / 100 == pytest.approx(json.loads(METRICS.read_text(encoding="utf-8"))["brain_table"]["dt"], abs=0.0006)
 
 
+def test_part1_metrics(built):
+    cells = part(built, 1)
+    assert cells, "the notebook has no Part 1"
+    metrics = json.loads(METRICS.read_text(encoding="utf-8"))
+    assert metrics["find_s_clean"] == ["up", "up", "down", "down"]  # index, middle, ring, pinky of a scissors hand
+    assert metrics["find_s_noisy"] == ["up", "up", "?", "?"]  # noise turns ring and pinky into "?"
+    assert metrics["eyes_detection_rate"] == pytest.approx(369 / 372)  # test split: 369 of the 372 pictures have a hand
+    models = ["nb", "dt", "logreg", "svm_linear", "svm_rbf", "perceptron"]
+    table = metrics["eyes_table"]
+    assert set(table) == set(models) | {"luck"} and table["luck"] == pytest.approx(1 / 3)
+    for value in [table[name] for name in models] + [metrics["eyes_test_acc"], metrics["eyes_test_acc_mirrored"]]:
+        assert abs(value * 372 - round(value * 372)) < 1e-6 and value <= 369 / 372 + 1e-9  # hits out of all 372 test pictures, and 3 of them have no hand (D5)
+    assert metrics["eyes_test_acc"] >= 0.95 and metrics["eyes_test_acc_mirrored"] >= 0.95  # D2: the target, as the pictures are and mirrored
+    assert table["nb"] < table["dt"] < table["logreg"]  # the measured order: Naive Bayes, then the tree, then the linear models
+    for name, hits in {"nb": 333, "dt": 351, "logreg": 369, "svm_linear": 369, "svm_rbf": 369, "perceptron": 369}.items():
+        assert table[name] == pytest.approx(hits / 372, abs=0.01), name  # within 0.01 of the measured hits out of 372 (a drop in one tied top model would not change the order above)
+    live = re.search(r"^Live eyes model: (\w+) \(official test accuracy ([\d.]+)% of 372\)$", shown_text(cells), re.MULTILINE)
+    capable = [name for name in models if name != "perceptron"]  # D3: the live model needs predict_proba, which the Perceptron lacks
+    best = [name for name in capable if table[name] == max(table[other] for other in capable)]
+    top = max(table[name] for name in models)
+    top_models = [name for name in models if table[name] == top]
+    assert f"{len(top_models)} of the {len(models)} models tie at the top, {len(best)} of them with probabilities" in shown_text(cells)  # prose counts come from the table
+    assert live and live.group(1) == best[0]  # the best model with probabilities; on a tie the first one in table order
+    assert float(live.group(2)) == pytest.approx(table[best[0]] * 100, abs=0.05)
+    assert metrics["eyes_test_acc"] == table[live.group(1)]  # the live model's own score on the pictures as they are
+    assert seconds(cells) <= 60  # Part 1's share of the fresh Colab "Run all" budget (D26)
+
+
+def test_part1_story(built):
+    headings = ["".join(cell["source"]).split(":")[0] for cell in built["cells"]
+                if cell["cell_type"] == "markdown" and "".join(cell["source"]).startswith("# Part ")]
+    assert headings[:3] == ["# Part 0", "# Part 1", "# Part 2"] and headings.count("# Part 1") == 1  # one Part 1, between Parts 0 and 2; later parts may follow
+    cells = part(built, 1)
+    text = shown_text(cells)
+    outputs = [output for cell in cells for output in cell.get("outputs", [])]
+    assert not [output for output in outputs if output["output_type"] == "error"]
+    assert not [output for output in outputs if output["output_type"] == "stream" and output["name"] == "stderr"]  # no warning boxes
+    assert "Detection (train): 2,407 of 2,520 pictures have a hand (95.5%)" in text
+    assert "Detection (test): 369 of 372 pictures have a hand (99.2%)" in text
+    assert "duplicate rows (looking only at the 65 size and landmark columns, not the file name): 0" in text  # the file name is unique in every row, so it must not be part of the check
+    markdown = "\n".join("".join(cell["source"]) for cell in cells if cell["cell_type"] == "markdown")
+    assert "different hand models" not in (markdown + text).lower()  # D6: the notebook measures the distances instead of claiming that
+    assert "never used to choose" not in markdown  # step 10 picks the live model by test accuracy: the test pictures are used once to choose, and never fitted or tuned on
+    near = re.search(r"^Nearest-neighbour distance \(median\): training to training ([\d.]+), test to training ([\d.]+)$", text, re.MULTILINE)
+    assert near and 0.3 < float(near.group(1)) < 2 and float(near.group(2)) > 2 * float(near.group(1))  # test pictures sit far farther away; a self-distance would give 0.00
+    close = re.search(r"^closer than 1\.0: (\d+)% of the training pictures to another training picture, (\d+)% of the test pictures to a training picture$", text, re.MULTILINE)
+    assert close and 50 <= int(close.group(1)) <= 80 and int(close.group(2)) == 0  # about two thirds of the training pictures have a near-copy, no test picture has
+    assert "fit: 1,925 pictures + 1,925 mirrored twins = 3,850 rows | validation: 482 pictures" in text  # the lab split of the 2,407 training pictures; twins on the fit side only
+    area = re.search(r"^micro-average AUC = ([\d.]+)$", text, re.MULTILINE)
+    assert area and float(area.group(1)) >= 0.95  # one-vs-rest ROC with label_binarize; a misaligned class order would print about 0.47
+    assert all(word in text for word in ["precision", "recall", "macro avg"])  # the classification report of the live model
+    for name in ["SVM", "tree"]:
+        assert re.search(rf"^Best parameters \({name}\): \{{.*\}}.* [\d.]+ ± [\d.]+", text, re.MULTILINE), name  # GridSearchCV: best settings, mean +- std
+    folds = re.findall(r"^Cross-validation (\w+): ([\d.]+) ± ([\d.]+)$", text, re.MULTILINE)  # cross_val_score for every model
+    assert [name for name, _, _ in folds] == ["nb", "dt", "logreg", "svm_linear", "svm_rbf", "perceptron"]
+    assert all(float(mean) >= 0.99 for _, mean, _ in folds)  # the prose says every model is at the top, because near-copies land in different folds
+    assert "Predict one new sample: testscissors01-00.png (true: scissors)" in text
+    assert re.search(r"^Live path \(predict_gesture\): scissors ", text, re.MULTILINE)  # the path the live game takes: mirror average of predict_proba
+    mirror_average = re.search(r"^Mirror-averaged accuracy \(predict_gesture\): ([\d.]+)% of 372$", text, re.MULTILINE)
+    assert mirror_average and float(mirror_average.group(1)) >= 95  # D2: the 95% target, out of all 372
+    # countplot, ratio histograms, ratio boxplots, heatmap, pairplot, nearest-neighbour boxplot, accuracy bar chart, confusion matrix, ROC, tree, learning curve, comparison figure
+    assert len(pictures(cells)) == 12
+    with_output = [cell for cell in cells if cell["cell_type"] == "code" and cell.get("outputs")]
+    assert pictures(with_output[-1:]) and "comparison_figure(" in "".join(with_output[-1]["source"])  # Part 1 ends with the comparison figure (D31)
+
+
 def module_level_names(source):
     """(imported names, names assigned or defined) at the top level of a cell; function bodies and comprehensions have their own scope."""
     imported, assigned = set(), set()
